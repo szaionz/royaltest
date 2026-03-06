@@ -1,0 +1,61 @@
+/* ── Reset & Base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --green-dark:  #0d3320;
+  --green-felt:  #1a5c38;
+  --green-mid:   #256b45;
+  --gold:        #c9a84c;
+  --gold-light:  #f0d080;
+  --text-light:  #f0ede4;
+  --text-muted:  #a89f8a;
+  --red:         #c0392b;
+  --chip-bg:     #1e1e1e;
+  --radius:      12px;
+}
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--green-dark);
+  color: var(--text-light);
+  min-height: 100vh;
+}
+
+h1 { font-size: 2rem; color: var(--gold); letter-spacing: 2px; }
+h2 { font-size: 1.4rem; color: var(--gold-light); }
+h3 { font-size: 1.1rem; color: var(--text-muted); }
+
+button {
+  cursor: pointer;
+  padding: 0.75rem 2rem;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 600;
+  transition: opacity 0.2s, transform 0.1s;
+}
+button:active { transform: scale(0.97); }
+button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: var(--gold);
+  color: var(--green-dark);
+}
+.btn-primary:hover:not(:disabled) { background: var(--gold-light); }
+
+input[type="text"] {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--green-mid);
+  background: var(--chip-bg);
+  color: var(--text-light);
+  font-size: 1.1rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input[type="text"]:focus { border-color: var(--gold); }
+
+.error { color: var(--red); font-size: 0.9rem; min-height: 1.2em; }
+
+.hidden { display: none !important; }
