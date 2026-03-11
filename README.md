@@ -71,6 +71,49 @@ ruff check server
 mypy server
 ```
 
+## Docker
+
+### Quick start with Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Open:
+
+- Host: `http://localhost:5000/host`
+- Join: `http://localhost:5000/join`
+
+If players join from other devices on your network, use your computer's LAN IP instead of `localhost`.
+
+This uses the checked-in `compose.yaml` to build the image, start the container, publish port `5000`, and persist SQLite data in a named volume.
+
+### Manual Docker commands
+
+If you want the lower-level Docker commands instead of Compose:
+
+#### Build the image
+
+```bash
+docker build -t royaltest .
+```
+
+This creates the reusable Docker image from `Dockerfile` but does not start the app.
+
+#### Run the container
+
+```bash
+docker run --rm -p 5000:5000 \
+  -e ROYALTEST_SECRET_KEY="change-me" \
+  -v royaltest-data:/data \
+  royaltest
+```
+
+This starts one container from the image and publishes the app on port `5000`.
+
+The container stores SQLite data at `/data/game.db` via `ROYALTEST_DB_PATH`.
+The image runs Gunicorn with a single gevent WebSocket worker because game state is kept in memory inside one Python process.
+
 ## Project Structure
 
 - `server/app.py` - Flask + Socket.IO server and routes

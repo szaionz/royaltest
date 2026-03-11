@@ -2,10 +2,14 @@
 db.py — Phase 4
 SQLite persistence: player profiles, game logs, analytics.
 """
-import sqlite3
 import os
+import sqlite3
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'game.db')
+DEFAULT_DB_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'game.db',
+)
+DB_PATH = os.getenv('ROYALTEST_DB_PATH', DEFAULT_DB_PATH)
 
 
 def get_connection():
@@ -77,7 +81,7 @@ def record_game_played(nickname: str):
 
 # ── Game log queries ───────────────────────────────────────────────────────────
 
-def log_game(winner: str, pot_size: int, biggest_pot: int, rarest_hand: str = None):
+def log_game(winner: str, pot_size: int, biggest_pot: int, rarest_hand: str | None = None):
     with get_connection() as conn:
         conn.execute('''
             INSERT INTO game_logs (winner, pot_size, biggest_pot, rarest_hand)

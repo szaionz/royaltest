@@ -2,3 +2,6 @@ flask
 flask-socketio
 simple-websocket
 qrcode[pil]
+gevent
+gevent-websocket
+gunicorn

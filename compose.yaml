@@ -1,0 +1,19 @@
+services:
+  royaltest:
+    build:
+      context: .
+    init: true
+    ports:
+      - '${ROYALTEST_PORT:-5000}:5000'
+    environment:
+      ROYALTEST_SECRET_KEY: ${ROYALTEST_SECRET_KEY:-royaltest-dev-secret}
+      ROYALTEST_HOST: 0.0.0.0
+      ROYALTEST_PORT: 5000
+      ROYALTEST_DEBUG: ${ROYALTEST_DEBUG:-0}
+      ROYALTEST_DB_PATH: /data/game.db
+    volumes:
+      - royaltest-data:/data
+    restart: unless-stopped
+
+volumes:
+  royaltest-data:
