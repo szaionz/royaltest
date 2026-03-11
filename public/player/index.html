@@ -1055,6 +1055,7 @@
     const callLabel        = document.getElementById('call-label');
     const callAmountDisplay= document.getElementById('call-amount-display');
     const raiseBtnDisplay  = document.getElementById('raise-btn-display');
+    const raiseBtnLabel    = btnRaise.querySelector('.act-btn-label');
     const btnRaiseCancel   = document.getElementById('btn-raise-cancel');
     const btnRaiseConfirm  = document.getElementById('btn-raise-confirm');
     const PLAYER_SESSION_KEY = 'royaltest.playerSessionId';
@@ -1064,6 +1065,7 @@
     let myChips    = 1000;
     let callAmount = 0;
     let currentPot = 0;
+    let currentTurnState = null;
     let pendingJoinName = '';
     let hasTriedAutoJoin = false;
     const playerSessionId = getOrCreatePlayerSessionId();
@@ -1195,6 +1197,12 @@
         raiseBtnDisplay.textContent = display;
     }
 
+    function setRaiseSummary(value) {
+        const display = fmt(value || 0);
+        raiseAmount.textContent = display;
+        raiseBtnDisplay.textContent = display;
+    }
+
     // ── Join ─────────────────────────────────────────────────────────────────
     function tryJoin() {
         const name = inputNickname.value.trim();
@@ -1222,9 +1230,14 @@
 
     // ── Actions ───────────────────────────────────────────────────────────────
     btnFold.addEventListener('click',  () => { soundFold();   submitAction('fold', 0); });
-    btnCall.addEventListener('click',  () => { soundAction(); submitAction('call', callAmount); });
+    btnCall.addEventListener('click',  () => { soundAction(); submitAction(callAmount > 0 ? 'call' : 'check', callAmount); });
     btnRaise.addEventListener('click', () => {
         if (btnRaise.disabled) return;
+        if (currentTurnState && currentTurnState.can_short_all_in && !currentTurnState.can_raise) {
+            soundAction();
+            submitAction('raise', currentTurnState.max_total || 0);
+            return;
+        }
         soundAction();
         setRaiseUiOpen(true);
     });
@@ -1249,6 +1262,10 @@
     });
 
     socket.on('join_error', (d) => { joinError.textContent = d.message; });
+    socket.on('action_error', (d) => {
+        setStatus('result', esc(d.message || 'Illegal action.'));
+        actionPanel.classList.add('active');
+    });
 
     socket.on('join_queued', (d) => {
         applyPlayerIdentity(d.nickname, d.chips);
@@ -1288,33 +1305,45 @@
 
     socket.on('your_turn', (d) => {
         soundYourTurn();
+        currentTurnState = d;
         callAmount = d.call_amount || 0;
         currentPot = d.pot || 0;
 
         // Call / Check button
-        if (callAmount > 0) {
-            callLabel.textContent        = 'Call';
-            callAmountDisplay.textContent = fmt(callAmount);
-        } else {
-            callLabel.textContent        = 'Check';
+        if (d.can_check) {
+            callLabel.textContent = 'Check';
             callAmountDisplay.textContent = '✓';
+        } else if (callAmount >= myChips) {
+            callLabel.textContent = 'All-in';
+            callAmountDisplay.textContent = fmt(Math.min(callAmount, myChips));
+        } else {
+            callLabel.textContent = 'Call';
+            callAmountDisplay.textContent = fmt(callAmount);
         }
 
         // Slider bounds
-        const minTotal = d.current_bet + d.min_raise;
-        const maxTotal = myChips + (d.current_bet - callAmount);
-        const canRaise = maxTotal > d.current_bet && maxTotal >= minTotal;
+        const minTotal = d.min_raise_total || d.max_total || 0;
+        const maxTotal = d.max_total || 0;
+        const canRaise = !!d.can_raise;
+        const canShortAllIn = !!d.can_short_all_in;
 
-        raiseSlider.min      = Math.min(minTotal, maxTotal);
-        raiseSlider.max      = maxTotal;
-        raiseSlider.value    = Math.min(minTotal, maxTotal);
+        raiseSlider.min = Math.min(minTotal, maxTotal);
+        raiseSlider.max = maxTotal;
+        raiseSlider.value = Math.min(minTotal, maxTotal);
         raiseSlider.disabled = !canRaise;
-        btnRaise.disabled    = !canRaise;
+        btnRaise.disabled = !(canRaise || canShortAllIn);
+        raiseBtnLabel.textContent = canRaise ? 'Raise' : (canShortAllIn ? 'All-in' : 'Raise');
+        btnRaiseConfirm.textContent = canRaise ? 'Confirm Raise' : 'Confirm';
         if (!canRaise) setRaiseUiOpen(false);
 
-        sliderMinLbl.textContent = `Min ${fmt(Math.min(minTotal, maxTotal))}`;
+        sliderMinLbl.textContent = canRaise ? `Min ${fmt(minTotal)}` : 'Full raise unavailable';
         sliderMaxLbl.textContent = `All-in ${fmt(maxTotal)}`;
-        updateSliderFill();
+        if (canRaise) {
+            updateSliderFill();
+        } else {
+            updateSliderFill();
+            setRaiseSummary(maxTotal);
+        }
 
         setStatus('my-turn', '▶ Your turn');
         setRaiseUiOpen(false);
@@ -1324,6 +1353,7 @@
     socket.on('game_state', (state) => { renderState(state); });
 
     socket.on('hand_over', (d) => {
+        currentTurnState = null;
         setRaiseUiOpen(false);
         actionPanel.classList.remove('active');
         renderState(d.game_state);
@@ -1343,6 +1373,7 @@
     });
 
     socket.on('game_finished', (d) => {
+        currentTurnState = null;
         setRaiseUiOpen(false);
         actionPanel.classList.remove('active');
         if (d.winner === myNickname) {
@@ -1394,6 +1425,7 @@
                 ${tags ? `<div class="mp-tags">${tags}</div>` : ''}
                 <div class="mp-chips">${fmt(p.chips)}</div>
                 ${p.is_connected === false ? '<div class="mp-fold">offline</div>' : ''}
+                ${p.all_in ? '<div class="mp-fold">all-in</div>' : ''}
                 ${p.round_bet > 0 ? `<div class="mp-bet">bet ${fmt(p.round_bet)}</div>` : ''}
                 ${p.folded ? '<div class="mp-fold">folded</div>' : ''}
             `;

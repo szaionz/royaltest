@@ -250,6 +250,14 @@ def _apply_and_advance(sid, action: str, amount: int):
     _sync_all_game_player_chips()
     _broadcast_game_state()
 
+    if event == 'invalid_action':
+        session_id = sid_to_session.get(sid)
+        info = session_players.get(session_id) if session_id else None
+        if info and info.get('sid'):
+            socketio.emit('action_error', {'message': current_game.last_action_error or 'Illegal action.'}, to=info['sid'])
+        _notify_current_player()
+        return
+
     if event == 'game_over':
         _broadcast_hand_over()
     elif event in ('continue', 'street_end'):
@@ -266,14 +274,11 @@ def _process_automatic_turns():
             return
 
         if isinstance(player, BotPlayer):
-            call_amount = current_game.current_bet - getattr(player, 'round_bet', 0)
             game_state_for_bot = {
                 'community_cards_objects': current_game.community_cards,
-                'call_amount': call_amount,
                 'pot': current_game.pot,
                 'big_blind': current_game.big_blind,
-                'current_bet': current_game.current_bet,
-                'min_raise': current_game.min_raise,
+                **current_game.legal_actions_for(player),
             }
             action_dict = player.get_action(game_state_for_bot)
             action = action_dict.get('action', 'fold')
@@ -334,12 +339,9 @@ def _notify_current_player():
     player = current_game.current_player()
     if player is None or not hasattr(player, 'sid') or player.sid is None:
         return
-    call_amount = current_game.current_bet - getattr(player, 'round_bet', 0)
     socketio.emit('your_turn', {
-        'call_amount': call_amount,
-        'min_raise': current_game.min_raise,
+        **current_game.legal_actions_for(player),
         'pot': current_game.pot,
-        'current_bet': current_game.current_bet,
     }, to=player.sid)
 
 
@@ -353,6 +355,7 @@ def _broadcast_hand_over():
         'winners': [p.nickname for p in winners],
         'winner_hands': current_game.winner_hand_names(),
         'winner_details': current_game.winner_hand_details(),
+        'pot_results': current_game.get_pot_results(),
         'game_state': current_game.to_dict(),
     })
 

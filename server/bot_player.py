@@ -66,7 +66,7 @@ class BotPlayer(Player):
     def _rock_strategy(self, strength: float, game_state: dict) -> dict:
         """Folds unless hand is very strong (> 0.7)."""
         if strength > 0.7:
-            return {'action': 'raise', 'amount': game_state.get('current_bet', 20) * 2}
+            return self._aggressive_action(game_state, max(20, game_state.get('min_raise_total', 40)))
         elif strength > 0.4:
             return {'action': 'call', 'amount': 0}
         return {'action': 'fold', 'amount': 0}
@@ -74,7 +74,11 @@ class BotPlayer(Player):
     def _maniac_strategy(self, strength: float, game_state: dict) -> dict:
         """Raises aggressively; rarely folds."""
         if strength > 0.3:
-            return {'action': 'raise', 'amount': game_state.get('current_bet', 20) * 3}
+            target = max(
+                game_state.get('min_raise_total', 0),
+                game_state.get('current_bet', 20) + (2 * game_state.get('min_raise', 20)),
+            )
+            return self._aggressive_action(game_state, target)
         return {'action': 'call', 'amount': 0}
 
     def _calculator_strategy(self, strength: float, game_state: dict) -> dict:
@@ -84,9 +88,24 @@ class BotPlayer(Player):
         pot_odds = call_amount / (pot + call_amount) if (pot + call_amount) > 0 else 0
 
         if strength > pot_odds + 0.2:
-            return {'action': 'raise', 'amount': game_state.get('current_bet', 20) * 2}
+            target = max(
+                game_state.get('min_raise_total', 0),
+                game_state.get('current_bet', 20) + game_state.get('min_raise', 20),
+            )
+            return self._aggressive_action(game_state, target)
         elif strength > pot_odds:
             return {'action': 'call', 'amount': call_amount}
+        return {'action': 'fold', 'amount': 0}
+
+    def _aggressive_action(self, game_state: dict, target: int) -> dict:
+        if game_state.get('can_raise'):
+            amount = min(target, game_state.get('max_total', target))
+            amount = max(amount, game_state.get('min_raise_total', amount))
+            return {'action': 'raise', 'amount': amount}
+        if game_state.get('can_short_all_in'):
+            return {'action': 'raise', 'amount': game_state.get('max_total', 0)}
+        if game_state.get('can_call') or game_state.get('call_amount', 0) == 0:
+            return {'action': 'call', 'amount': game_state.get('call_amount', 0)}
         return {'action': 'fold', 'amount': 0}
 
     # ── Hand evaluation ────────────────────────────────────────────────────────
