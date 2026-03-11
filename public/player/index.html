@@ -428,27 +428,36 @@
         /* ── Board Area ── */
         .board-area {
             flex: 1;
-            display: flex;
-            flex-direction: column;
+            display: grid;
+            grid-template-columns: 1fr;
+            grid-template-areas:
+                'board'
+                'hand';
             align-items: center;
             justify-content: center;
+            justify-items: center;
+            align-content: center;
             gap: 16px;
             min-height: 0;
+            transition: grid-template-columns 0.22s ease, gap 0.22s ease, padding-top 0.22s ease;
         }
 
         #game-screen.raise-open .board-area {
-            flex-direction: row;
-            align-items: flex-start;
-            justify-content: space-between;
+            grid-template-columns: 38% 1fr;
+            grid-template-areas: 'hand board';
+            align-items: center;
+            justify-items: stretch;
             gap: 10px;
             padding-top: 2px;
         }
 
         /* Community Cards */
         .community-cards {
+            grid-area: board;
             display: flex;
             gap: 5px;
             align-items: center;
+            transition: gap 0.22s ease, transform 0.22s ease;
         }
 
         #game-screen.raise-open .community-cards {
@@ -458,10 +467,15 @@
             gap: 0;
             min-width: 0;
             align-self: center;
+            transform: translateX(2px);
         }
 
         #game-screen.raise-open .community-cards .card.small {
             margin-left: -8px;
+        }
+
+        .community-cards .card.small {
+            transition: margin-left 0.22s ease;
         }
 
         #game-screen.raise-open .community-cards .card.small:first-child {
@@ -470,10 +484,12 @@
 
         /* Hole Cards */
         .hole-cards-wrapper {
+            grid-area: hand;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 10px;
+            transition: gap 0.22s ease, transform 0.22s ease;
         }
 
         #game-screen.raise-open .hole-cards-wrapper {
@@ -483,12 +499,14 @@
             gap: 0;
             min-width: 0;
             align-self: center;
+            transform: translateX(-2px);
         }
 
         .hole-cards {
             display: flex;
             gap: 14px;
             align-items: flex-end;
+            transition: gap 0.22s ease;
         }
 
         #game-screen.raise-open .hole-cards {
@@ -509,6 +527,7 @@
         /* Elegant card fan */
         .hole-cards .card:nth-child(1) { transform: rotate(-5deg) translateY(4px); }
         .hole-cards .card:nth-child(2) { transform: rotate(5deg)  translateY(4px); }
+        .hole-cards .card { transition: transform 0.22s ease; }
 
         .hand-name {
             font-family: 'Cormorant Garamond', serif;
@@ -559,6 +578,7 @@
 
         /* Large — hole cards */
         .card.large { width: 90px; height: 128px; }
+        .card.large { transition: width 0.22s ease, height 0.22s ease; }
 
         #game-screen.raise-open .card.large {
             width: 68px;
@@ -570,6 +590,7 @@
             font-family: 'IBM Plex Mono', monospace;
             font-size: 23px; font-weight: 700; line-height: 1;
             text-shadow: 0 0 0.01px currentColor;
+            transition: top 0.22s ease, left 0.22s ease, font-size 0.22s ease;
         }
 
         #game-screen.raise-open .card.large .top-left {
@@ -584,6 +605,7 @@
             font-size: 23px; font-weight: 700; line-height: 1;
             text-shadow: 0 0 0.01px currentColor;
             transform: rotate(180deg);
+            transition: bottom 0.22s ease, right 0.22s ease, font-size 0.22s ease;
         }
 
         #game-screen.raise-open .card.large .bottom-right {
@@ -596,6 +618,7 @@
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             font-size: 46px; line-height: 1;
+            transition: font-size 0.22s ease;
         }
 
         #game-screen.raise-open .card.large .center {
@@ -643,6 +666,7 @@
         }
         .action-panel.active { display: flex; }
         .action-panel.raise-open { max-height: min(62vh, 560px); }
+        .action-panel { transition: max-height 0.22s ease; }
 
         /* Panel header — "Your Turn" */
         .action-header {
@@ -673,12 +697,29 @@
         /* Slider section */
         .slider-section {
             background: var(--surface-3);
-            border: 1px solid var(--border);
+            border: 1px solid transparent;
             border-radius: var(--radius);
-            padding: 12px 14px 10px;
-            display: none;
+            padding: 0 14px;
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(6px);
+            overflow: hidden;
+            pointer-events: none;
+            transition:
+                max-height 0.22s ease,
+                opacity 0.18s ease,
+                transform 0.22s ease,
+                padding 0.22s ease,
+                border-color 0.22s ease;
         }
-        .action-panel.raise-open .slider-section { display: block; }
+        .action-panel.raise-open .slider-section {
+            border-color: var(--border);
+            padding: 12px 14px 10px;
+            max-height: 240px;
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+        }
         .slider-top {
             display: flex;
             justify-content: space-between;
@@ -822,11 +863,27 @@
         .btn-raise:not(:disabled):active { box-shadow: 0 2px 6px rgba(30,61,18,0.5); }
 
         .raise-confirm-row {
-            display: none;
+            display: grid;
             grid-template-columns: 1fr 1.2fr;
             gap: 8px;
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(6px);
+            overflow: hidden;
+            pointer-events: none;
+            transition:
+                max-height 0.22s ease,
+                opacity 0.18s ease,
+                transform 0.22s ease,
+                margin-top 0.22s ease;
         }
-        .action-panel.raise-open .raise-confirm-row { display: grid; }
+        .action-panel.raise-open .raise-confirm-row {
+            max-height: 64px;
+            opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
+            margin-top: 2px;
+        }
 
         .raise-sub-btn {
             border: none;
