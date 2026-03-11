@@ -8,7 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'royaltest-dev-secret'
+app.config['SECRET_KEY'] = os.getenv('ROYALTEST_SECRET_KEY', 'royaltest-dev-secret')
 socketio = SocketIO(app, cors_allowed_origins='*')
 
 # ── State ──────────────────────────────────────────────────────────────────────
@@ -520,9 +520,12 @@ def _request_sid() -> str:
 # ── Entry Point ───────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    bind_host = os.getenv('ROYALTEST_HOST', '0.0.0.0')
+    port = int(os.getenv('ROYALTEST_PORT', '5000'))
+    debug = os.getenv('ROYALTEST_DEBUG', '0').lower() in {'1', 'true', 'yes', 'on'}
     local_ip = _get_local_ip()
     print()
-    print(f'  Host page : http://localhost:5000/host')
-    print(f'  Player URL: http://{local_ip}:5000/join')
+    print(f'  Host page : http://localhost:{port}/host')
+    print(f'  Player URL: http://{local_ip}:{port}/join')
     print()
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    socketio.run(app, host=bind_host, port=port, debug=debug)
