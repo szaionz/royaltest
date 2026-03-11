@@ -1057,11 +1057,16 @@
     const raiseBtnDisplay  = document.getElementById('raise-btn-display');
     const btnRaiseCancel   = document.getElementById('btn-raise-cancel');
     const btnRaiseConfirm  = document.getElementById('btn-raise-confirm');
+    const PLAYER_SESSION_KEY = 'royaltest.playerSessionId';
+    const PLAYER_NICKNAME_KEY = 'royaltest.playerNickname';
 
     let myNickname = '';
     let myChips    = 1000;
     let callAmount = 0;
     let currentPot = 0;
+    let pendingJoinName = '';
+    let hasTriedAutoJoin = false;
+    const playerSessionId = getOrCreatePlayerSessionId();
 
     function setRaiseUiOpen(open) {
         actionPanel.classList.toggle('raise-open', open);
@@ -1111,6 +1116,54 @@
         screens[name].classList.add('active');
     }
 
+    function getOrCreatePlayerSessionId() {
+        try {
+            let sessionId = localStorage.getItem(PLAYER_SESSION_KEY);
+            if (!sessionId) {
+                sessionId = `player-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+                localStorage.setItem(PLAYER_SESSION_KEY, sessionId);
+            }
+            return sessionId;
+        } catch (_) {
+            return `player-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        }
+    }
+
+    function saveNickname(name) {
+        try {
+            localStorage.setItem(PLAYER_NICKNAME_KEY, name);
+        } catch (_) {}
+    }
+
+    function loadSavedNickname() {
+        try {
+            return (localStorage.getItem(PLAYER_NICKNAME_KEY) || '').trim();
+        } catch (_) {
+            return '';
+        }
+    }
+
+    function applyPlayerIdentity(name, chips) {
+        myNickname = name;
+        myChips = chips;
+        pendingJoinName = '';
+        saveNickname(name);
+        inputNickname.value = name;
+    }
+
+    function tryAutoJoin() {
+        if (hasTriedAutoJoin) return;
+        hasTriedAutoJoin = true;
+
+        const savedName = loadSavedNickname();
+        if (!savedName) return;
+
+        pendingJoinName = savedName;
+        inputNickname.value = savedName;
+        joinError.textContent = 'Rejoining your seat…';
+        socket.emit('join_game', { nickname: savedName, session_id: playerSessionId });
+    }
+
     function makeCard(rank, suit, size = 'small') {
         const isRed = suit === '♥' || suit === '♦';
         const el = document.createElement('div');
@@ -1146,8 +1199,9 @@
     function tryJoin() {
         const name = inputNickname.value.trim();
         if (!name) return;
+        pendingJoinName = name;
         joinError.textContent = '';
-        socket.emit('join_game', { nickname: name });
+        socket.emit('join_game', { nickname: name, session_id: playerSessionId });
     }
     btnJoin.addEventListener('click', tryJoin);
     inputNickname.addEventListener('keydown', e => { if (e.key === 'Enter') tryJoin(); });
@@ -1188,19 +1242,27 @@
     }
 
     // ── Socket events ─────────────────────────────────────────────────────────
+    socket.on('connect', () => {
+        if (!myNickname) {
+            tryAutoJoin();
+        }
+    });
+
     socket.on('join_error', (d) => { joinError.textContent = d.message; });
 
     socket.on('join_queued', (d) => {
-        myNickname = d.nickname;
-        myChips    = d.chips;
+        applyPlayerIdentity(d.nickname, d.chips);
         document.getElementById('my-badge-queue').textContent = `${d.nickname}  ·  ${fmt(d.chips)}`;
+        setStatus('', d.reconnected ? 'Reconnected. Waiting for the next hand…' : 'Waiting for the next hand…');
         showScreen('queue');
     });
 
     socket.on('join_success', (d) => {
-        myNickname = d.nickname;
-        myChips    = d.chips;
+        applyPlayerIdentity(d.nickname, d.chips);
         myBadge.textContent = `${d.nickname}  ·  ${fmt(d.chips)}`;
+        if (d.reconnected && !document.getElementById('game-screen').classList.contains('active')) {
+            setStatus('', 'Reconnected to your table.');
+        }
         showScreen('lobby');
     });
 
@@ -1331,6 +1393,7 @@
                 <div class="mp-name">${esc(p.nickname)}</div>
                 ${tags ? `<div class="mp-tags">${tags}</div>` : ''}
                 <div class="mp-chips">${fmt(p.chips)}</div>
+                ${p.is_connected === false ? '<div class="mp-fold">offline</div>' : ''}
                 ${p.round_bet > 0 ? `<div class="mp-bet">bet ${fmt(p.round_bet)}</div>` : ''}
                 ${p.folded ? '<div class="mp-fold">folded</div>' : ''}
             `;

@@ -33,9 +33,11 @@ class Player:
 class HumanPlayer(Player):
     """Action comes from the player's phone via Socket.IO."""
 
-    def __init__(self, nickname: str, sid: str, chips: int = 1000):
+    def __init__(self, nickname: str, session_id: str, sid: str | None, chips: int = 1000):
         super().__init__(nickname, chips)
+        self.session_id = session_id
         self.sid = sid
+        self.is_connected = sid is not None
 
     def get_action(self, game_state: dict) -> dict:
         raise RuntimeError('HumanPlayer actions come from socket events, not get_action()')

@@ -295,7 +295,10 @@ class Game:
 
             next_state, n_cards = transitions[self.state]
             self.state = next_state
-            self.community_cards.extend(self.deck.deal(n_cards))
+            deck = self.deck
+            if deck is None:
+                raise ValueError('Cannot advance street without an active deck')
+            self.community_cards.extend(deck.deal(n_cards))
             start = (self.dealer_index + 1) % len(self.players)
             self.to_act = self._action_order_from(start)
 
@@ -374,6 +377,7 @@ class Game:
                 'bet': p.bet,
                 'round_bet': getattr(p, 'round_bet', 0),
                 'folded': p.folded,
+                'is_connected': getattr(p, 'is_connected', True),
                 'is_dealer': i == self.dealer_index,
                 'is_sb': i == self.small_blind_index,
                 'is_bb': i == self.big_blind_index,

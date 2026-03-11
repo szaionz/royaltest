@@ -13,11 +13,12 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 # ── State ──────────────────────────────────────────────────────────────────────
 
-connected_players = {}   # sid -> {nickname, chips}
-current_game = None      # Game instance (active during a game session)
-sid_to_player = {}       # sid -> HumanPlayer (during game)
+session_players = {}      # session_id -> {nickname, chips, sid, is_connected, state}
+sid_to_session = {}       # sid -> session_id
+current_game = None       # Game instance (active during a game session)
+session_to_player = {}    # session_id -> HumanPlayer (during game)
 game_active = False
-join_queue = []          # [{sid, nickname, chips}] players waiting to join next hand
+join_queue = []           # [session_id] players waiting to join next hand
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -26,13 +27,16 @@ join_queue = []          # [{sid, nickname, chips}] players waiting to join next
 def index():
     return '<h2>RoyalTest</h2><a href="/host">Host Game</a> | <a href="/join">Join Game</a>'
 
+
 @app.route('/host')
 def host():
     return send_from_directory(os.path.join(PUBLIC_DIR, 'host'), 'index.html')
 
+
 @app.route('/join')
 def join():
     return send_from_directory(os.path.join(PUBLIC_DIR, 'player'), 'index.html')
+
 
 @app.route('/public/<path:filename>')
 def public_files(filename):
@@ -43,62 +47,107 @@ def public_files(filename):
 
 @socketio.on('connect')
 def on_connect():
-    print(f'[connect] {request.sid}')
+    print(f'[connect] {_request_sid()}')
+
 
 @socketio.on('disconnect')
 def on_disconnect():
-    global join_queue
-    player = connected_players.pop(request.sid, None)
-    prev_len = len(join_queue)
-    join_queue = [p for p in join_queue if p['sid'] != request.sid]
-    if len(join_queue) != prev_len:
-        _broadcast_queue()
-    if player:
-        print(f'[disconnect] {player["nickname"]}')
-        emit('player_left', {'nickname': player['nickname']}, broadcast=True)
-        _broadcast_lobby()
+    session_id = sid_to_session.pop(_request_sid(), None)
+    if not session_id:
+        return
 
-    # If a game is running and this player was in it, auto-fold on their turn
-    if current_game and request.sid in sid_to_player:
-        p = sid_to_player.pop(request.sid, None)
-        if p and not p.folded and current_game.current_player() is p:
-            _apply_and_advance(request.sid, 'fold', 0)
+    info = session_players.get(session_id)
+    if not info:
+        return
+
+    info['sid'] = None
+    info['is_connected'] = False
+    print(f'[disconnect] {info["nickname"]}')
+
+    player = session_to_player.get(session_id)
+    if player:
+        player.sid = None
+        player.is_connected = False
+
+    _broadcast_lobby()
+    _broadcast_queue()
+
+    if current_game:
+        _process_automatic_turns()
+        _broadcast_game_state()
+
 
 @socketio.on('host_connected')
 def on_host_connected():
     emit('lobby_update', _lobby_snapshot())
+    emit('queue_update', _queue_snapshot())
+    if current_game:
+        emit('game_starting', {})
+        emit('game_state', current_game.to_dict())
+
 
 @socketio.on('join_game')
 def on_join_game(data):
     nickname = (data.get('nickname') or '').strip()
+    session_id = (data.get('session_id') or '').strip()
+
+    if not session_id:
+        emit('join_error', {'message': 'Missing browser session. Refresh and try again.'})
+        return
+    if len(session_id) > 100:
+        emit('join_error', {'message': 'Invalid browser session.'})
+        return
+
+    existing = session_players.get(session_id)
+    if existing:
+        _attach_session_to_sid(session_id, _request_sid())
+        _sync_player_connection(session_id)
+        print(f'[rejoin] {existing["nickname"]}')
+        _emit_session_state(session_id)
+        _broadcast_lobby()
+        _broadcast_queue()
+        if current_game:
+            _broadcast_game_state()
+        return
+
     if not nickname:
         emit('join_error', {'message': 'Nickname cannot be empty.'})
         return
     if len(nickname) > 20:
         emit('join_error', {'message': 'Nickname must be 20 characters or less.'})
         return
-    if (any(p['nickname'] == nickname for p in connected_players.values()) or
-            any(p['nickname'] == nickname for p in join_queue)):
+    if any(p['nickname'] == nickname for p in session_players.values()):
         emit('join_error', {'message': f'"{nickname}" is already taken. Choose another.'})
         return
 
+    session_players[session_id] = {
+        'session_id': session_id,
+        'nickname': nickname,
+        'chips': 1000,
+        'sid': None,
+        'is_connected': False,
+        'state': 'lobby',
+    }
+    _attach_session_to_sid(session_id, _request_sid())
+
     if game_active:
-        join_queue.append({'sid': request.sid, 'nickname': nickname, 'chips': 1000})
+        session_players[session_id]['state'] = 'queued'
+        join_queue.append(session_id)
         print(f'[queued] {nickname}')
         emit('join_queued', {'nickname': nickname, 'chips': 1000, 'position': len(join_queue)})
         _broadcast_queue()
         return
 
-    connected_players[request.sid] = {'nickname': nickname, 'chips': 1000}
     print(f'[join] {nickname}')
     emit('join_success', {'nickname': nickname, 'chips': 1000})
     _broadcast_lobby()
 
+
 @socketio.on('start_game')
 def on_start_game():
-    global current_game, sid_to_player, game_active
+    global current_game, session_to_player, game_active
 
-    players_list = _lobby_snapshot()
+    players_list = _lobby_players()
     if len(players_list) < 2:
         emit('start_error', {'message': 'Need at least 2 players to start.'})
         return
@@ -107,11 +156,15 @@ def on_start_game():
     from bot_player import HumanPlayer
 
     players = []
-    sid_to_player = {}
-    for sid, info in connected_players.items():
-        p = HumanPlayer(info['nickname'], sid, info['chips'])
+    session_to_player = {}
+    for session_id, info in session_players.items():
+        if info['state'] != 'lobby':
+            continue
+        info['state'] = 'game'
+        p = HumanPlayer(info['nickname'], session_id, info['sid'], info['chips'])
+        p.is_connected = info['is_connected']
         players.append(p)
-        sid_to_player[sid] = p
+        session_to_player[session_id] = p
 
     current_game = Game(players)
     game_active = True
@@ -119,10 +172,10 @@ def on_start_game():
 
     print(f'[start_game] {len(players)} players')
     socketio.emit('game_starting', {})
+    _broadcast_lobby()
     _broadcast_game_state()
     _send_private_hands()
-    _notify_current_player()
-    _process_bot_actions()
+    _process_automatic_turns()
 
 
 # ── Socket.IO — Game ──────────────────────────────────────────────────────────
@@ -132,8 +185,9 @@ def on_player_action(data):
     if not current_game or not game_active:
         return
     action = data.get('action', '')
-    amount  = int(data.get('amount', 0))
-    _apply_and_advance(request.sid, action, amount)
+    amount = int(data.get('amount', 0))
+    _apply_and_advance(_request_sid(), action, amount)
+
 
 @socketio.on('next_hand')
 def on_next_hand():
@@ -149,14 +203,14 @@ def on_next_hand():
         socketio.emit('game_finished', {
             'winner': alive[0].nickname if alive else None
         })
-        game_active = False
+        _end_game_session()
         return
 
     current_game.next_hand()
+    _sync_all_game_player_chips()
     _broadcast_game_state()
     _send_private_hands()
-    _notify_current_player()
-    _process_bot_actions()
+    _process_automatic_turns()
 
 
 # ── Game helpers ──────────────────────────────────────────────────────────────
@@ -166,73 +220,112 @@ def _flush_queue():
     global join_queue
     if not join_queue or not current_game:
         return
+
     from bot_player import HumanPlayer
-    for entry in join_queue:
-        connected_players[entry['sid']] = {'nickname': entry['nickname'], 'chips': entry['chips']}
-        p = HumanPlayer(entry['nickname'], entry['sid'], entry['chips'])
+
+    for session_id in join_queue:
+        info = session_players.get(session_id)
+        if not info:
+            continue
+        info['state'] = 'game'
+        p = HumanPlayer(info['nickname'], session_id, info['sid'], info['chips'])
+        p.is_connected = info['is_connected']
         current_game.players.append(p)
-        sid_to_player[entry['sid']] = p
-        socketio.emit('game_starting', {}, to=entry['sid'])
-        print(f'[queue->game] {entry["nickname"]}')
+        session_to_player[session_id] = p
+        if info['sid']:
+            socketio.emit('game_starting', {}, to=info['sid'])
+        print(f'[queue->game] {info["nickname"]}')
+
     join_queue = []
     _broadcast_queue()
+    _broadcast_lobby()
+
 
 def _apply_and_advance(sid, action: str, amount: int):
-    """Apply one action and handle all follow-up (bots, street transitions, game over)."""
-    next_player, event = current_game.apply_action(sid, action, amount)
+    """Apply one action and handle all follow-up (bots, auto-folds, street transitions)."""
+    if not current_game:
+        return
+
+    _, event = current_game.apply_action(sid, action, amount)
+    _sync_all_game_player_chips()
     _broadcast_game_state()
 
     if event == 'game_over':
         _broadcast_hand_over()
     elif event in ('continue', 'street_end'):
-        _notify_current_player()
-        _process_bot_actions()
+        _process_automatic_turns()
 
-def _process_bot_actions():
-    """Run all consecutive bot turns until a human needs to act (or game ends)."""
-    from bot_player import BotPlayer
+
+def _process_automatic_turns():
+    """Run bot turns and disconnected human turns until a connected human needs to act."""
+    from bot_player import BotPlayer, HumanPlayer
 
     while current_game and current_game.state.value not in ('waiting', 'showdown'):
         player = current_game.current_player()
-        if player is None or not isinstance(player, BotPlayer):
-            break
-
-        call_amount = current_game.current_bet - getattr(player, 'round_bet', 0)
-        game_state_for_bot = {
-            'community_cards_objects': current_game.community_cards,
-            'call_amount': call_amount,
-            'pot': current_game.pot,
-            'big_blind': current_game.big_blind,
-            'current_bet': current_game.current_bet,
-            'min_raise': current_game.min_raise,
-        }
-        action_dict = player.get_action(game_state_for_bot)
-        action = action_dict.get('action', 'fold')
-        amount = action_dict.get('amount', 0)
-
-        _, event = current_game.apply_action(None, action, amount)
-        _broadcast_game_state()
-
-        if event == 'game_over':
-            _broadcast_hand_over()
+        if player is None:
             return
-        elif event in ('continue', 'street_end'):
-            _notify_current_player()
+
+        if isinstance(player, BotPlayer):
+            call_amount = current_game.current_bet - getattr(player, 'round_bet', 0)
+            game_state_for_bot = {
+                'community_cards_objects': current_game.community_cards,
+                'call_amount': call_amount,
+                'pot': current_game.pot,
+                'big_blind': current_game.big_blind,
+                'current_bet': current_game.current_bet,
+                'min_raise': current_game.min_raise,
+            }
+            action_dict = player.get_action(game_state_for_bot)
+            action = action_dict.get('action', 'fold')
+            amount = action_dict.get('amount', 0)
+
+            _, event = current_game.apply_action(None, action, amount)
+            _sync_all_game_player_chips()
+            _broadcast_game_state()
+
+            if event == 'game_over':
+                _broadcast_hand_over()
+                return
+            continue
+
+        if isinstance(player, HumanPlayer) and not player.is_connected:
+            call_amount = current_game.current_bet - getattr(player, 'round_bet', 0)
+            action = 'check' if call_amount <= 0 else 'fold'
+            print(f'[auto_{action}] {player.nickname}')
+            _, event = current_game.apply_action(None, action, 0)
+            _sync_all_game_player_chips()
+            _broadcast_game_state()
+
+            if event == 'game_over':
+                _broadcast_hand_over()
+                return
+            continue
+
+        _notify_current_player()
+        return
+
 
 def _broadcast_game_state():
     if not current_game:
         return
     socketio.emit('game_state', current_game.to_dict())
 
+
 def _send_private_hands():
-    """Send each human player their hole cards privately."""
+    """Send each connected human player their hole cards privately."""
     if not current_game:
         return
-    for sid, player in sid_to_player.items():
-        if player.hand:
-            socketio.emit('your_hand', {
-                'hand': [c.to_dict() for c in player.hand]
-            }, to=sid)
+    for player in session_to_player.values():
+        _send_private_hand(player)
+
+
+def _send_private_hand(player):
+    if not player.sid or not player.hand:
+        return
+    socketio.emit('your_hand', {
+        'hand': [c.to_dict() for c in player.hand]
+    }, to=player.sid)
+
 
 def _notify_current_player():
     """Emit 'your_turn' to whoever needs to act next."""
@@ -249,7 +342,12 @@ def _notify_current_player():
         'current_bet': current_game.current_bet,
     }, to=player.sid)
 
+
 def _broadcast_hand_over():
+    if not current_game:
+        return
+
+    _sync_all_game_player_chips()
     winners = current_game.get_winners()
     socketio.emit('hand_over', {
         'winners': [p.nickname for p in winners],
@@ -261,14 +359,118 @@ def _broadcast_hand_over():
 
 # ── Lobby helpers ─────────────────────────────────────────────────────────────
 
+def _lobby_players():
+    return [info for info in session_players.values() if info['state'] == 'lobby']
+
+
 def _lobby_snapshot():
-    return list(connected_players.values())
+    return [
+        {
+            'nickname': info['nickname'],
+            'chips': info['chips'],
+            'is_connected': info['is_connected'],
+        }
+        for info in _lobby_players()
+    ]
+
 
 def _broadcast_lobby():
     socketio.emit('lobby_update', _lobby_snapshot())
 
+
+def _queue_snapshot():
+    out = []
+    for session_id in join_queue:
+        info = session_players.get(session_id)
+        if not info:
+            continue
+        out.append({
+            'nickname': info['nickname'],
+            'chips': info['chips'],
+            'is_connected': info['is_connected'],
+        })
+    return out
+
+
 def _broadcast_queue():
-    socketio.emit('queue_update', [{'nickname': p['nickname'], 'chips': p['chips']} for p in join_queue])
+    socketio.emit('queue_update', _queue_snapshot())
+
+
+def _attach_session_to_sid(session_id: str, sid: str):
+    info = session_players[session_id]
+    old_sid = info.get('sid')
+    if old_sid and old_sid != sid:
+        sid_to_session.pop(old_sid, None)
+
+    sid_to_session[sid] = session_id
+    info['sid'] = sid
+    info['is_connected'] = True
+
+
+def _sync_player_connection(session_id: str):
+    player = session_to_player.get(session_id)
+    info = session_players.get(session_id)
+    if player and info:
+        player.sid = info['sid']
+        player.is_connected = info['is_connected']
+
+
+def _sync_all_game_player_chips():
+    for session_id, player in session_to_player.items():
+        info = session_players.get(session_id)
+        if info:
+            info['chips'] = player.chips
+
+
+def _emit_session_state(session_id: str):
+    info = session_players.get(session_id)
+    if not info or not info.get('sid'):
+        return
+
+    payload = {
+        'nickname': info['nickname'],
+        'chips': info['chips'],
+        'reconnected': True,
+    }
+
+    if info['state'] == 'queued':
+        emit('join_queued', {
+            **payload,
+            'position': _queue_position(session_id),
+        })
+    else:
+        emit('join_success', payload)
+
+    if current_game and session_id in session_to_player:
+        player = session_to_player[session_id]
+        emit('game_starting', {})
+        emit('game_state', current_game.to_dict(for_sid=player.sid))
+        _send_private_hand(player)
+        if current_game.current_player() is player:
+            _notify_current_player()
+
+
+def _queue_position(session_id: str) -> int:
+    try:
+        return join_queue.index(session_id) + 1
+    except ValueError:
+        return 0
+
+
+def _end_game_session():
+    global current_game, session_to_player, game_active, join_queue
+
+    game_active = False
+    current_game = None
+    session_to_player = {}
+    join_queue = []
+
+    for info in session_players.values():
+        info['state'] = 'lobby'
+
+    _broadcast_queue()
+    _broadcast_lobby()
+
 
 def _get_local_ip():
     try:
@@ -279,6 +481,10 @@ def _get_local_ip():
         return ip
     except Exception:
         return '127.0.0.1'
+
+
+def _request_sid() -> str:
+    return str(getattr(request, 'sid', ''))
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────

@@ -734,7 +734,7 @@
                 lobbyList.innerHTML = players.map(p =>
                     `<div class="lobby-player-badge">
                         <strong>${esc(p.nickname)}</strong>
-                        <span>&#9679; ${p.chips.toLocaleString()}</span>
+                        <span>${p.is_connected === false ? 'offline' : '&#9679; ' + p.chips.toLocaleString()}</span>
                     </div>`
                 ).join('');
             }
@@ -789,7 +789,7 @@
                 queuePanel.classList.remove('visible');
             } else {
                 queueList.innerHTML = players.map(p =>
-                    `<div class="queue-item">${esc(p.nickname)}<span>&#9679; ${p.chips.toLocaleString()}</span></div>`
+                    `<div class="queue-item">${esc(p.nickname)}<span>${p.is_connected === false ? 'offline' : '&#9679; ' + p.chips.toLocaleString()}</span></div>`
                 ).join('');
                 queuePanel.classList.add('visible');
             }
@@ -1003,6 +1003,7 @@
                     <div class="seat-info">
                         <div class="seat-name">${esc(p.nickname)}</div>
                         <div class="seat-chips">&#9679; ${p.chips.toLocaleString()}</div>
+                        ${p.is_connected === false ? '<div style="font-size:0.72rem;font-weight:600;color:#8f8261;margin-top:4px;letter-spacing:0.08em;text-transform:uppercase;">Disconnected</div>' : ''}
                         ${p.folded ? '<div style="font-size:0.78rem;font-weight:600;color:#8c3a3a;margin-top:4px;letter-spacing:0.08em;text-transform:uppercase;">Folded</div>' : ''}
                     </div>
                 `;
