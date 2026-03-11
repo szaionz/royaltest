@@ -129,7 +129,7 @@
             color: var(--ivory);
             font-family: 'Cormorant Garamond', serif;
             font-size: 1.35rem;
-            font-weight: 500;
+            font-weight: 600;
             padding: 14px 18px;
             outline: none;
             text-align: center;
@@ -286,12 +286,13 @@
             align-items: center;
             padding: 11px 16px;
             border-bottom: 1px solid var(--border);
-            font-size: 0.78rem;
+            font-size: 0.88rem;
+            font-weight: 600;
             letter-spacing: 0.03em;
         }
         .lobby-item:last-child { border-bottom: none; }
         .lobby-item.me { color: var(--gold); }
-        .lobby-item .l-chips { color: var(--ivory-dim); font-size: 0.72rem; }
+        .lobby-item .l-chips { color: var(--ivory-dim); font-size: 0.82rem; font-weight: 600; }
 
         /* ─────────────────────────────── */
         /* GAME SCREEN                     */
@@ -300,6 +301,7 @@
             background: var(--bg);
             flex-direction: column;
             position: relative;
+            overflow: hidden;
         }
 
         /* Felt area — top section */
@@ -315,10 +317,11 @@
 
         /* ── Status Banner ── */
         .status-banner {
-            padding: 9px 14px;
+            padding: 11px 14px;
             border-radius: var(--radius);
-            font-size: 0.68rem;
-            letter-spacing: 0.12em;
+            font-size: clamp(0.9rem, 2.7vw, 1.05rem);
+            font-weight: 700;
+            letter-spacing: 0.05em;
             text-align: center;
             background: rgba(0,0,0,0.45);
             border: 1px solid var(--border);
@@ -358,8 +361,8 @@
             background: var(--surface-2);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 5px 9px;
-            font-size: 0.62rem;
+            padding: 7px 11px;
+            font-size: 0.76rem;
             white-space: nowrap;
             flex-shrink: 0;
             transition: border-color 0.25s, background 0.25s;
@@ -370,10 +373,10 @@
             background: rgba(196,151,90,0.05);
         }
         .mini-player.folded { opacity: 0.28; }
-        .mini-player .mp-name  { color: var(--ivory); font-size: 0.68rem; font-weight: 500; }
-        .mini-player .mp-chips { color: var(--ivory-dim); font-size: 0.6rem; margin-top: 2px; }
-        .mini-player .mp-bet   { color: var(--gold); font-size: 0.6rem; }
-        .mini-player .mp-fold  { color: #c05050; font-size: 0.58rem; }
+        .mini-player .mp-name  { color: var(--ivory); font-size: 0.84rem; font-weight: 700; }
+        .mini-player .mp-chips { color: var(--ivory-dim); font-size: 0.78rem; margin-top: 2px; font-weight: 600; }
+        .mini-player .mp-bet   { color: var(--gold); font-size: 0.78rem; font-weight: 700; }
+        .mini-player .mp-fold  { color: #c05050; font-size: 0.74rem; font-weight: 700; }
         .mini-player .mp-tags  { display: flex; gap: 3px; margin-top: 1px; }
         .mp-tag {
             font-size: 0.52rem;
@@ -399,22 +402,24 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 7px 4px;
+            padding: 10px 6px;
             border-right: 1px solid var(--border);
         }
         .info-cell:last-child { border-right: none; }
         .info-label {
-            font-size: 0.52rem;
-            letter-spacing: 0.16em;
+            font-size: clamp(0.72rem, 2.2vw, 0.82rem);
+            letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--ivory-dim);
-            margin-bottom: 3px;
+            font-weight: 600;
+            margin-bottom: 4px;
         }
         .info-val {
-            font-size: 0.98rem;
-            font-weight: 600;
+            font-size: clamp(1.28rem, 4.2vw, 1.55rem);
+            font-weight: 700;
             color: var(--gold-bright);
             letter-spacing: 0.02em;
+            line-height: 1;
         }
 
         /* ── Board Area ── */
@@ -453,11 +458,11 @@
 
         .hand-name {
             font-family: 'Cormorant Garamond', serif;
-            font-size: 1.05rem;
+            font-size: 1.2rem;
             font-style: italic;
-            font-weight: 500;
+            font-weight: 700;
             color: var(--gold);
-            letter-spacing: 0.08em;
+            letter-spacing: 0.06em;
             min-height: 1.3em;
             text-align: center;
         }
@@ -481,13 +486,15 @@
         .card.small { width: 46px; height: 66px; }
         .card.small .top-left {
             position: absolute; top: 3px; left: 4px;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 13px; font-weight: 700; line-height: 1;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px; font-weight: 700; line-height: 1;
+            text-shadow: 0 0 0.01px currentColor;
         }
         .card.small .bottom-right {
             position: absolute; bottom: 3px; right: 4px;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 13px; font-weight: 700; line-height: 1;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 14px; font-weight: 700; line-height: 1;
+            text-shadow: 0 0 0.01px currentColor;
             transform: rotate(180deg);
         }
         .card.small .center {
@@ -500,13 +507,15 @@
         .card.large { width: 90px; height: 128px; }
         .card.large .top-left {
             position: absolute; top: 6px; left: 7px;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 22px; font-weight: 700; line-height: 1;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 23px; font-weight: 700; line-height: 1;
+            text-shadow: 0 0 0.01px currentColor;
         }
         .card.large .bottom-right {
             position: absolute; bottom: 6px; right: 7px;
-            font-family: 'Cormorant Garamond', serif;
-            font-size: 22px; font-weight: 700; line-height: 1;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 23px; font-weight: 700; line-height: 1;
+            text-shadow: 0 0 0.01px currentColor;
             transform: rotate(180deg);
         }
         .card.large .center {
@@ -544,9 +553,18 @@
             display: none;
             flex-direction: column;
             gap: 11px;
-            flex-shrink: 0;
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 40;
+            max-height: min(48vh, 430px);
+            overflow-y: auto;
+            box-shadow: 0 -16px 38px rgba(0,0,0,0.65);
+            backdrop-filter: blur(3px);
         }
         .action-panel.active { display: flex; }
+        .action-panel.raise-open { max-height: min(62vh, 560px); }
 
         /* Panel header — "Your Turn" */
         .action-header {
@@ -567,10 +585,11 @@
             to   { box-shadow: 0 0 12px rgba(196,151,90,0.9); }
         }
         .action-header-text {
-            font-size: 0.62rem;
-            letter-spacing: 0.2em;
+            font-size: clamp(0.82rem, 2.4vw, 0.96rem);
+            letter-spacing: 0.1em;
             text-transform: uppercase;
             color: var(--gold);
+            font-weight: 700;
         }
 
         /* Slider section */
@@ -579,7 +598,9 @@
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 12px 14px 10px;
+            display: none;
         }
+        .action-panel.raise-open .slider-section { display: block; }
         .slider-top {
             display: flex;
             justify-content: space-between;
@@ -587,14 +608,15 @@
             margin-bottom: 10px;
         }
         .slider-label {
-            font-size: 0.58rem;
-            letter-spacing: 0.18em;
+            font-size: clamp(0.74rem, 2.2vw, 0.84rem);
+            letter-spacing: 0.08em;
             text-transform: uppercase;
             color: var(--ivory-dim);
+            font-weight: 600;
         }
         .slider-value {
-            font-size: 1.28rem;
-            font-weight: 600;
+            font-size: clamp(1.45rem, 4.4vw, 1.75rem);
+            font-weight: 700;
             color: var(--gold-bright);
             letter-spacing: 0.02em;
         }
@@ -628,10 +650,11 @@
         .slider-limits {
             display: flex;
             justify-content: space-between;
-            font-size: 0.6rem;
+            font-size: clamp(0.72rem, 2vw, 0.82rem);
             color: var(--ivory-dim);
             margin-top: 5px;
             letter-spacing: 0.04em;
+            font-weight: 600;
         }
 
         .quick-btns {
@@ -641,13 +664,14 @@
         }
         .quick-btn {
             flex: 1;
-            padding: 6px 2px;
+            padding: 8px 3px;
             border-radius: 6px;
             border: 1px solid var(--border);
             background: var(--surface-2);
             color: var(--ivory-dim);
             font-family: 'IBM Plex Mono', monospace;
-            font-size: 0.6rem;
+            font-size: clamp(0.74rem, 2.2vw, 0.84rem);
+            font-weight: 700;
             letter-spacing: 0.03em;
             cursor: pointer;
             transition: border-color 0.14s, color 0.14s, background 0.14s;
@@ -671,7 +695,7 @@
             justify-content: center;
             border: none;
             border-radius: var(--radius);
-            padding: 14px 6px;
+            padding: 11px 6px;
             cursor: pointer;
             font-family: 'IBM Plex Mono', monospace;
             transition: transform 0.12s, opacity 0.12s, box-shadow 0.15s;
@@ -679,16 +703,16 @@
         .act-btn:active  { transform: scale(0.95); }
         .act-btn:disabled { opacity: 0.28; cursor: not-allowed; transform: none !important; }
         .act-btn-label {
-            font-size: 0.56rem;
-            letter-spacing: 0.18em;
+            font-size: clamp(0.74rem, 2.2vw, 0.84rem);
+            letter-spacing: 0.09em;
             text-transform: uppercase;
-            font-weight: 600;
+            font-weight: 700;
             margin-bottom: 4px;
             opacity: 0.8;
         }
         .act-btn-amount {
-            font-size: 0.88rem;
-            font-weight: 600;
+            font-size: clamp(1.05rem, 3vw, 1.2rem);
+            font-weight: 700;
             letter-spacing: 0.02em;
         }
 
@@ -718,6 +742,36 @@
             box-shadow: 0 4px 14px rgba(30,61,18,0.6);
         }
         .btn-raise:not(:disabled):active { box-shadow: 0 2px 6px rgba(30,61,18,0.5); }
+
+        .raise-confirm-row {
+            display: none;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 8px;
+        }
+        .action-panel.raise-open .raise-confirm-row { display: grid; }
+
+        .raise-sub-btn {
+            border: none;
+            border-radius: var(--radius);
+            padding: 11px 10px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: clamp(0.74rem, 2.2vw, 0.84rem);
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+        .btn-raise-cancel {
+            background: var(--surface-2);
+            color: var(--ivory-dim);
+            border: 1px solid var(--border);
+        }
+        .btn-raise-confirm {
+            background: linear-gradient(160deg, var(--green) 0%, var(--green-dark) 100%);
+            color: #b7ed9b;
+            border: 1px solid rgba(45,90,30,0.45);
+            box-shadow: 0 4px 14px rgba(30,61,18,0.5);
+        }
     </style>
 </head>
 <body>
@@ -828,6 +882,11 @@
                 <span class="act-btn-amount" id="raise-btn-display">—</span>
             </button>
         </div>
+
+        <div id="raise-confirm-row" class="raise-confirm-row">
+            <button id="btn-raise-cancel" class="raise-sub-btn btn-raise-cancel">Close</button>
+            <button id="btn-raise-confirm" class="raise-sub-btn btn-raise-confirm">Confirm Raise</button>
+        </div>
     </div>
 
 </div>
@@ -861,11 +920,17 @@
     const callLabel        = document.getElementById('call-label');
     const callAmountDisplay= document.getElementById('call-amount-display');
     const raiseBtnDisplay  = document.getElementById('raise-btn-display');
+    const btnRaiseCancel   = document.getElementById('btn-raise-cancel');
+    const btnRaiseConfirm  = document.getElementById('btn-raise-confirm');
 
     let myNickname = '';
     let myChips    = 1000;
     let callAmount = 0;
     let currentPot = 0;
+
+    function setRaiseUiOpen(open) {
+        actionPanel.classList.toggle('raise-open', open);
+    }
 
     // ── Audio ────────────────────────────────────────────────────────────────
     let _audioCtx = null;
@@ -968,9 +1033,19 @@
     // ── Actions ───────────────────────────────────────────────────────────────
     btnFold.addEventListener('click',  () => { soundFold();   submitAction('fold', 0); });
     btnCall.addEventListener('click',  () => { soundAction(); submitAction('call', callAmount); });
-    btnRaise.addEventListener('click', () => { soundAction(); submitAction('raise', parseInt(raiseSlider.value, 10)); });
+    btnRaise.addEventListener('click', () => {
+        if (btnRaise.disabled) return;
+        soundAction();
+        setRaiseUiOpen(true);
+    });
+    btnRaiseCancel.addEventListener('click', () => { setRaiseUiOpen(false); });
+    btnRaiseConfirm.addEventListener('click', () => {
+        soundAction();
+        submitAction('raise', parseInt(raiseSlider.value, 10));
+    });
 
     function submitAction(action, amount) {
+        setRaiseUiOpen(false);
         actionPanel.classList.remove('active');
         setStatus('', 'Action sent…');
         socket.emit('player_action', { action, amount });
@@ -1037,18 +1112,21 @@
         raiseSlider.value    = Math.min(minTotal, maxTotal);
         raiseSlider.disabled = !canRaise;
         btnRaise.disabled    = !canRaise;
+        if (!canRaise) setRaiseUiOpen(false);
 
         sliderMinLbl.textContent = `Min ${fmt(Math.min(minTotal, maxTotal))}`;
         sliderMaxLbl.textContent = `All-in ${fmt(maxTotal)}`;
         updateSliderFill();
 
         setStatus('my-turn', '▶ Your turn');
+        setRaiseUiOpen(false);
         actionPanel.classList.add('active');
     });
 
     socket.on('game_state', (state) => { renderState(state); });
 
     socket.on('hand_over', (d) => {
+        setRaiseUiOpen(false);
         actionPanel.classList.remove('active');
         renderState(d.game_state);
 
@@ -1067,6 +1145,7 @@
     });
 
     socket.on('game_finished', (d) => {
+        setRaiseUiOpen(false);
         actionPanel.classList.remove('active');
         if (d.winner === myNickname) {
             setStatus('result', '&#127942; You won the whole game!');
@@ -1123,6 +1202,7 @@
         });
 
         if (!isMyTurn) {
+            setRaiseUiOpen(false);
             actionPanel.classList.remove('active');
             if (state.state !== 'showdown' && state.current_player) {
                 setStatus('', `Waiting for <strong>${esc(state.current_player)}</strong>…`);
