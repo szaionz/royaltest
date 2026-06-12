@@ -1074,7 +1074,13 @@
 
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
-    const socket = io();
+    const socket = io({
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 3000,
+        reconnectionDelayMax: 5000,
+        timeout: 10000,
+    });
 
     const screens          = { join: document.getElementById('join-screen'), queue: document.getElementById('queue-screen'), lobby: document.getElementById('lobby-screen'), game: document.getElementById('game-screen') };
     const btnJoin          = document.getElementById('btn-join');
@@ -1117,7 +1123,6 @@
     let currentTurnState = null;
     let raiseStep = 1;
     let pendingJoinName = '';
-    let hasTriedAutoJoin = false;
     const playerSessionId = getOrCreatePlayerSessionId();
     const prefersCoarsePointer = window.matchMedia('(pointer: coarse)');
     const isLandscape = window.matchMedia('(orientation: landscape)');
@@ -1238,17 +1243,17 @@
         inputNickname.value = name;
     }
 
-    function tryAutoJoin() {
-        if (hasTriedAutoJoin) return;
-        hasTriedAutoJoin = true;
-
-        const savedName = loadSavedNickname();
-        if (!savedName) return;
-
-        pendingJoinName = savedName;
-        inputNickname.value = savedName;
-        joinError.textContent = 'Rejoining your seat…';
-        socket.emit('join_game', { nickname: savedName, session_id: playerSessionId });
+    function trySessionRejoin() {
+        const name = (myNickname || pendingJoinName || loadSavedNickname()).trim();
+        if (!name) return;
+        pendingJoinName = name;
+        inputNickname.value = name;
+        if (myNickname) {
+            setStatus('', 'Connection restored. Rejoining your seat…');
+        } else {
+            joinError.textContent = 'Rejoining your seat…';
+        }
+        socket.emit('join_game', { nickname: name, session_id: playerSessionId });
     }
 
     function makeCard(rank, suit, size = 'small') {
@@ -1372,8 +1377,23 @@
 
     // ── Socket events ─────────────────────────────────────────────────────────
     socket.on('connect', () => {
-        if (!myNickname) {
-            tryAutoJoin();
+        trySessionRejoin();
+    });
+
+    socket.on('disconnect', () => {
+        if (myNickname) {
+            setStatus('result', 'Disconnected from server. Reconnecting…');
+            actionPanel.classList.remove('active');
+        } else {
+            joinError.textContent = 'Disconnected from server. Reconnecting…';
+        }
+    });
+
+    socket.io.on('reconnect_attempt', () => {
+        if (myNickname) {
+            setStatus('result', 'Disconnected from server. Reconnecting…');
+        } else {
+            joinError.textContent = 'Disconnected from server. Reconnecting…';
         }
     });
 

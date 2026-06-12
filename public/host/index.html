@@ -797,7 +797,13 @@
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
-        const socket = io();
+        const socket = io({
+            reconnection: true,
+            reconnectionAttempts: Infinity,
+            reconnectionDelay: 3000,
+            reconnectionDelayMax: 5000,
+            timeout: 10000,
+        });
 
         const lobbyScreen    = document.getElementById('lobby-screen');
         const gameScreen     = document.getElementById('game-screen');
@@ -902,6 +908,15 @@
             socket.emit('host_connected');
             document.getElementById('join-url').textContent =
                 `${location.protocol}//${location.hostname}:5000/join`;
+            turnBannerEl.textContent = '';
+        });
+
+        socket.on('disconnect', () => {
+            turnBannerEl.textContent = 'Disconnected from server. Reconnecting…';
+        });
+
+        socket.io.on('reconnect_attempt', () => {
+            turnBannerEl.textContent = 'Disconnected from server. Reconnecting…';
         });
 
         const savedHostSound = localStorage.getItem('host_sound_enabled');
