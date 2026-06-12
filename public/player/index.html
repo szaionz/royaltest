@@ -1386,6 +1386,8 @@
         if (!/^[A-Z0-9]{8}$/.test(tableToken)) {
             inputNickname.setAttribute('placeholder', 'Game code');
             btnJoin.addEventListener('click', () => {location.replace(`${document.location.origin}${document.location.pathname}?token=${inputNickname.value}`);})
+            inputNickname.addEventListener('keydown', e => { if (e.key === 'Enter') location.replace(`${document.location.origin}${document.location.pathname}?token=${inputNickname.value}`); });
+
             return;
         }
         trySessionRejoin();
