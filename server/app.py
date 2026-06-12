@@ -3,6 +3,9 @@ from flask import Flask, send_from_directory, request
 from flask_socketio import SocketIO, emit
 import os
 import socket
+from sqlalchemy import Boolean, Integer, String, create_engine, delete, select, text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PUBLIC_DIR = os.path.join(BASE_DIR, 'public')
@@ -19,6 +22,154 @@ current_game = None       # Game instance (active during a game session)
 session_to_player = {}    # session_id -> HumanPlayer (during game)
 game_active = False
 join_queue = []           # [session_id] players waiting to join next hand
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class RuntimeState(Base):
+    __tablename__ = 'runtime_state'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    current_game: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    game_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'), index=True)
+
+
+class SessionPlayerState(Base):
+    __tablename__ = 'session_players_state'
+    session_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    nickname: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
+    chips: Mapped[int] = mapped_column(Integer, nullable=False)
+    sid: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
+    is_connected: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'), index=True)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+
+
+class SidSessionState(Base):
+    __tablename__ = 'sid_session_state'
+    sid: Mapped[str] = mapped_column(String(100), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+
+class SessionToPlayerState(Base):
+    __tablename__ = 'session_to_player_state'
+    session_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    player_data: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+
+class JoinQueueState(Base):
+    __tablename__ = 'join_queue_state'
+    position: Mapped[int] = mapped_column(Integer, primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+
+
+DATABASE_URL = os.getenv(
+    'ROYALTEST_DATABASE_URL',
+    'postgresql+psycopg://postgres@localhost:5432/royaltest',
+)
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def _serialize_session_player(player) -> dict:
+    return {
+        'nickname': player.nickname,
+        'chips': player.chips,
+        'sid': getattr(player, 'sid', None),
+        'is_connected': getattr(player, 'is_connected', True),
+        'session_id': getattr(player, 'session_id', None),
+    }
+
+
+def _load_runtime_state():
+    global session_players, sid_to_session, current_game, session_to_player, game_active, join_queue
+    from game_engine import Game
+
+    with SessionLocal() as db:
+        session_players = {
+            row.session_id: {
+                'session_id': row.session_id,
+                'nickname': row.nickname,
+                'chips': row.chips,
+                'sid': row.sid,
+                'is_connected': row.is_connected,
+                'state': row.state,
+            }
+            for row in db.execute(select(SessionPlayerState)).scalars().all()
+        }
+        sid_to_session = {
+            row.sid: row.session_id
+            for row in db.execute(select(SidSessionState)).scalars().all()
+        }
+        join_queue = [
+            row.session_id
+            for row in db.execute(select(JoinQueueState).order_by(JoinQueueState.position)).scalars().all()
+        ]
+        runtime = db.get(RuntimeState, 1)
+        if runtime and runtime.current_game:
+            current_game = Game.from_persisted_dict(runtime.current_game)
+            session_to_player = {
+                p.session_id: p
+                for p in current_game.players
+                if hasattr(p, 'session_id')
+            }
+        else:
+            current_game = None
+            session_to_player = {}
+        game_active = bool(runtime.game_active) if runtime else False
+
+
+def _persist_runtime_state():
+    with SessionLocal.begin() as db:
+        runtime = db.get(RuntimeState, 1)
+        if runtime is None:
+            runtime = RuntimeState(id=1)
+            db.add(runtime)
+
+        runtime.game_active = game_active
+        runtime.current_game = current_game.to_persisted_dict() if current_game else None
+
+        db.execute(delete(SessionPlayerState))
+        db.add_all([
+            SessionPlayerState(
+                session_id=session_id,
+                nickname=info['nickname'],
+                chips=info['chips'],
+                sid=info.get('sid'),
+                is_connected=info.get('is_connected', False),
+                state=info.get('state', 'lobby'),
+            )
+            for session_id, info in session_players.items()
+        ])
+
+        db.execute(delete(SidSessionState))
+        db.add_all([
+            SidSessionState(sid=sid, session_id=session_id)
+            for sid, session_id in sid_to_session.items()
+        ])
+
+        db.execute(delete(SessionToPlayerState))
+        db.add_all([
+            SessionToPlayerState(session_id=session_id, player_data=_serialize_session_player(player))
+            for session_id, player in session_to_player.items()
+        ])
+
+        db.execute(delete(JoinQueueState))
+        db.add_all([
+            JoinQueueState(position=index, session_id=session_id)
+            for index, session_id in enumerate(join_queue)
+        ])
+
+
+def _init_persistence():
+    Base.metadata.create_all(engine)
+    with SessionLocal.begin() as db:
+        if db.get(RuntimeState, 1) is None:
+            db.add(RuntimeState(id=1, game_active=False, current_game=None))
+    _load_runtime_state()
+
+
+_init_persistence()
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -69,6 +220,7 @@ def on_disconnect():
         player.sid = None
         player.is_connected = False
 
+    _persist_runtime_state()
     _broadcast_lobby()
     _broadcast_queue()
 
@@ -104,6 +256,7 @@ def on_join_game(data):
     if existing:
         _attach_session_to_sid(session_id, _request_sid())
         _sync_player_connection(session_id)
+        _persist_runtime_state()
         print(f'[rejoin] {existing["nickname"]}')
         _emit_session_state(session_id)
         _broadcast_lobby()
@@ -135,11 +288,13 @@ def on_join_game(data):
     if game_active:
         session_players[session_id]['state'] = 'queued'
         join_queue.append(session_id)
+        _persist_runtime_state()
         print(f'[queued] {nickname}')
         emit('join_queued', {'nickname': nickname, 'chips': 1000, 'position': len(join_queue)})
         _broadcast_queue()
         return
 
+    _persist_runtime_state()
     print(f'[join] {nickname}')
     emit('join_success', {'nickname': nickname, 'chips': 1000})
     _broadcast_lobby()
@@ -171,6 +326,7 @@ def on_start_game():
     current_game = Game(players)
     game_active = True
     current_game.start_hand()
+    _persist_runtime_state()
 
     print(f'[start_game] {len(players)} players')
     socketio.emit('game_starting', {})
@@ -205,6 +361,7 @@ def on_next_hand():
 
     current_game.next_hand()
     _sync_all_game_player_chips()
+    _persist_runtime_state()
     _broadcast_game_state()
     _send_private_hands()
     _process_automatic_turns()
@@ -238,6 +395,7 @@ def _flush_queue():
         print(f'[queue->game] {info["nickname"]}')
 
     join_queue = remaining_queue
+    _persist_runtime_state()
     _broadcast_queue()
     _broadcast_lobby()
 
@@ -249,6 +407,7 @@ def _apply_and_advance(sid, action: str, amount: int):
 
     _, event = current_game.apply_action(sid, action, amount)
     _sync_all_game_player_chips()
+    _persist_runtime_state()
     _broadcast_game_state()
 
     if event == 'invalid_action':
@@ -287,6 +446,7 @@ def _process_automatic_turns():
 
             _, event = current_game.apply_action(None, action, amount)
             _sync_all_game_player_chips()
+            _persist_runtime_state()
             _broadcast_game_state()
 
             if event == 'game_over':
@@ -300,6 +460,7 @@ def _process_automatic_turns():
             print(f'[auto_{action}] {player.nickname}')
             _, event = current_game.apply_action(None, action, 0)
             _sync_all_game_player_chips()
+            _persist_runtime_state()
             _broadcast_game_state()
 
             if event == 'game_over':
@@ -498,6 +659,7 @@ def _end_game_session():
     for info in session_players.values():
         info['state'] = 'lobby'
 
+    _persist_runtime_state()
     _broadcast_queue()
     _broadcast_lobby()
 
