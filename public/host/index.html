@@ -144,13 +144,16 @@
             text-align: center;
             backdrop-filter: blur(6px);
             box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            align-items: center;
+            justify-items: center;
+            padding: 16px;
         }
         .join-url-box .lbl {
-            font-size: 0.9rem;
+            font-size: 32px;
             letter-spacing: 0.16em;
             text-transform: uppercase;
-            color: var(--text-muted);
-            margin-bottom: 6px;
+            /* color: var(--text-muted); */
+            /* margin-bottom: 6px; */
         }
 
         .lobby-empty {
@@ -750,7 +753,50 @@
             filter: none;
             opacity: 0.42;
         }
+        #qrcode {
+            align-items: center;
+            justify-items: center;
+            width: fit-content;
+            height: fit-content;
+            padding: 24px;
+            background-color: white;
+        }
+        .mono {
+            font-family: monospace;
+            background-color: #333;
+            border-radius: 4%;
+            font-size: 24px;
+            padding: 10px;
+        }
+        .game-token {
+            font-size: 64px;
+        }
+        .join-url-boxes-div {
+            display: flex;
+            justify-items: center;
+            align-items: center;
+        }
+        .logical {
+            font-size: 100px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            /* color: var(--text-muted); */
+            margin: 64px;
+        }
+        .little-logical {
+            font-size: 64px;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+            /* color: var(--text-muted); */
+            margin: 8px;
+        }
+        .join-url-box {
+            padding-bottom: 24px;
+            padding-top: 10px;
+        }
     </style>
+    
+
 </head>
 <body>
 
@@ -761,15 +807,22 @@
             <div class="lobby-logo">♠ RoyalTest</div>
             <div class="lobby-tagline">Private Texas Hold'em</div>
             <div class="lobby-rule"></div>
+            <div class="join-url-boxes-div">
+            <div class="join-url-box">
+                <div class="lbl">Scan</div>
+                <!-- <div class="url" id="join-url">—</div> -->
+                <div id="qrcode"></div>
+                
+            </div>
+                            <div class="logical">OR</div>
 
             <div class="join-url-box">
-                <div class="lbl">Players join by scanning</div>
-                <div class="join-qr-wrap">
-                    <div class="join-qr-frame">
-                        <canvas id="join-qr" width="180" height="180"></canvas>
-                    </div>
-                    <div class="join-qr-instructions" id="join-qr-instructions">Waiting for table link…</div>
-                </div>
+                <div class="lbl">navigate to</div>
+                <div class="mono"><span id="join-url"></span></div>
+                <div class="little-logical">AND</div>
+                <div class="lbl">Join with code</div>
+                <div class="mono game-token"><span id="code"></span></div>
+            </div>
             </div>
 
             <div id="lobby-list" class="lobby-players">
@@ -820,7 +873,7 @@
     </div>
 
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js"></script>
+    <script src="/public/qrcode.min.js"></script>
     <script>
         const socket = io({
             reconnection: true,
@@ -956,8 +1009,18 @@
                 return;
             }
             socket.emit('host_connected', { token: tableToken });
-            renderJoinQr(`${location.protocol}//${location.host}/join?token=${tableToken}`);
-            turnBannerEl.textContent = '';
+            var joinUrl = `${location.protocol}//${location.host}/join?token=${tableToken}`;
+            document.getElementById('join-url').textContent =
+                `${location.protocol}//${location.host}/join`;
+            document.getElementById("qrcode").innerHTML = "";
+            document.getElementById("code").textContent=tableToken;
+
+            new QRCode(document.getElementById("qrcode"), {
+                text: joinUrl,
+                width: 300,
+                height: 300
+            });
+            turnBannerEl.textContent = joinUrl;
         });
 
         socket.on('disconnect', () => {
