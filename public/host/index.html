@@ -888,6 +888,12 @@
             timeout: 10000,
         });
 
+        socket.on('table_admin_update', (payload) => {
+            const settings = (payload && payload.settings) || {};
+            const nextTimer = Number(settings.round_timer_seconds || 7);
+            roundTimerSeconds = Math.max(3, Math.min(60, Math.floor(nextTimer)));
+        });
+
         const lobbyScreen    = document.getElementById('lobby-screen');
         const gameScreen     = document.getElementById('game-screen');
         const lobbyList      = document.getElementById('lobby-list');
@@ -919,6 +925,7 @@
         let tableRectCache = null;
         let potCenterCache = null;
         let soundEnabled = true;
+        let roundTimerSeconds = 7;
         let lowPerfMode = /web0s|smart-tv|smarttv|hbbtv|netcast|tizen/i.test(navigator.userAgent || '');
         const tableToken = (new URLSearchParams(window.location.search).get('token') || '').toUpperCase();
 
@@ -1066,9 +1073,9 @@
                     </div>`
                 ).join('');
             }
-            btnStart.disabled = players.length < 2;
+            btnStart.disabled = true;
             btnStart.textContent = players.length >= 2
-                ? `Start Game (${players.length} players)`
+                ? 'Waiting for admin to start…'
                 : 'Waiting for players…';
         });
 
@@ -1131,7 +1138,7 @@
                 : '';
             btnNextHand.style.display = '';
             winnerOverlay.style.display = 'flex';
-            startNextHandCountdown();
+            startNextHandCountdown(data.round_timer_seconds || roundTimerSeconds);
             // Reset bet tracking for next hand
             prevBets = {};
             prevPot  = 0;
@@ -1158,8 +1165,8 @@
 
         let _nextHandTimer = null;
 
-        function startNextHandCountdown() {
-            let secs = 7;
+        function startNextHandCountdown(seconds) {
+            let secs = Math.max(1, Number(seconds || roundTimerSeconds || 7));
             const el = document.getElementById('next-hand-countdown');
             el.textContent = `Next hand in ${secs}…`;
             _nextHandTimer = setInterval(() => {

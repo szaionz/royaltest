@@ -932,6 +932,125 @@
             box-shadow: 0 4px 14px rgba(30,61,18,0.5);
         }
 
+        .admin-toggle {
+            position: fixed;
+            right: 14px;
+            bottom: 14px;
+            z-index: 10000;
+            border: 1px solid var(--border-warm);
+            border-radius: 999px;
+            padding: 10px 14px;
+            background: rgba(16, 13, 10, 0.94);
+            color: var(--gold);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.66rem;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            display: none;
+        }
+        .admin-toggle.visible { display: inline-flex; }
+
+        .admin-panel {
+            position: fixed;
+            right: 10px;
+            bottom: 54px;
+            width: min(92vw, 320px);
+            max-height: min(70vh, 520px);
+            overflow: auto;
+            z-index: 10000;
+            background: rgba(16, 13, 10, 0.98);
+            border: 1px solid var(--border-warm);
+            border-radius: var(--radius);
+            padding: 12px;
+            display: none;
+            gap: 10px;
+        }
+        .admin-panel.visible { display: grid; }
+        .admin-title {
+            color: var(--gold);
+            font-size: 0.72rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .admin-subtitle {
+            color: var(--ivory-dim);
+            font-size: 0.62rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .admin-fields {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+        .admin-field {
+            display: grid;
+            gap: 4px;
+        }
+        .admin-field label {
+            font-size: 0.62rem;
+            color: var(--ivory-dim);
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .admin-field input {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--ivory);
+            padding: 8px 10px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.82rem;
+        }
+        .admin-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .admin-btn {
+            border: 1px solid var(--border-warm);
+            border-radius: 8px;
+            padding: 10px 8px;
+            background: rgba(196,151,90,0.14);
+            color: var(--ivory);
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.66rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .admin-btn.danger {
+            background: rgba(139,30,51,0.24);
+            border-color: rgba(139,30,51,0.55);
+            color: #ffb0b8;
+        }
+        .kick-list {
+            display: grid;
+            gap: 6px;
+        }
+        .kick-item {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            gap: 8px;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: rgba(255,255,255,0.02);
+            font-size: 0.74rem;
+        }
+        .kick-item button {
+            border: 1px solid rgba(139,30,51,0.55);
+            border-radius: 6px;
+            background: rgba(139,30,51,0.3);
+            color: #ffb0b8;
+            padding: 6px 8px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.62rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
         .orientation-lock-overlay {
             display: none;
             position: fixed;
@@ -986,7 +1105,7 @@
 <!-- ── SCREEN: LOBBY ── -->
 <div id="lobby-screen" class="screen">
     <div class="lobby-logo">♠ RoyalTest</div>
-    <div class="lobby-waiting">Waiting for host to start…</div>
+    <div class="lobby-waiting">Waiting for game to start…</div>
     <div id="my-badge">···</div>
     <div class="lobby-list" id="lobby-list"></div>
 </div>
@@ -1074,6 +1193,36 @@
 
 </div>
 
+<button id="admin-toggle" class="admin-toggle" type="button">Admin</button>
+<div id="admin-panel" class="admin-panel" aria-live="polite">
+    <div class="admin-title">Table Admin</div>
+    <div class="admin-subtitle" id="admin-subtitle">You can manage this table.</div>
+    <div class="admin-fields">
+        <div class="admin-field">
+            <label for="admin-initial-chips">Initial Chips</label>
+            <input id="admin-initial-chips" type="number" min="100" step="100">
+        </div>
+        <div class="admin-field">
+            <label for="admin-round-timer">Round Timer (seconds)</label>
+            <input id="admin-round-timer" type="number" min="3" max="60" step="1">
+        </div>
+        <div class="admin-field">
+            <label for="admin-small-blind">Small Blind</label>
+            <input id="admin-small-blind" type="number" min="1" step="1">
+        </div>
+        <div class="admin-field">
+            <label for="admin-big-blind">Big Blind</label>
+            <input id="admin-big-blind" type="number" min="2" step="1">
+        </div>
+    </div>
+    <div class="admin-actions">
+        <button id="admin-save-settings" class="admin-btn" type="button">Save Settings</button>
+        <button id="admin-start-game" class="admin-btn" type="button">Start Game</button>
+    </div>
+    <div class="admin-subtitle">Kick players</div>
+    <div id="admin-kick-list" class="kick-list"></div>
+</div>
+
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
     const socket = io({
@@ -1114,6 +1263,16 @@
     const btnRaiseCancel   = document.getElementById('btn-raise-cancel');
     const btnRaiseConfirm  = document.getElementById('btn-raise-confirm');
     const orientationLockOverlay = document.getElementById('orientation-lock-overlay');
+    const adminToggle      = document.getElementById('admin-toggle');
+    const adminPanel       = document.getElementById('admin-panel');
+    const adminSubtitle    = document.getElementById('admin-subtitle');
+    const adminInitialChips= document.getElementById('admin-initial-chips');
+    const adminRoundTimer  = document.getElementById('admin-round-timer');
+    const adminSmallBlind  = document.getElementById('admin-small-blind');
+    const adminBigBlind    = document.getElementById('admin-big-blind');
+    const adminSaveSettings= document.getElementById('admin-save-settings');
+    const adminStartGame   = document.getElementById('admin-start-game');
+    const adminKickList    = document.getElementById('admin-kick-list');
     const PLAYER_SESSION_KEY = 'royaltest.playerSessionId';
     const PLAYER_NICKNAME_KEY = 'royaltest.playerNickname';
     const tableToken = (new URLSearchParams(window.location.search).get('token') || '').toUpperCase();
@@ -1126,6 +1285,11 @@
     let currentTurnState = null;
     let raiseStep = 1;
     let pendingJoinName = '';
+    let isAdmin = false;
+    let latestAdminSessionId = '';
+    let latestTableSettings = { initial_chips: 1000, round_timer_seconds: 7, small_blind: 10, big_blind: 20 };
+    let latestTablePlayers = [];
+    let tableGameActive = false;
     const playerSessionId = getOrCreatePlayerSessionId();
     const prefersCoarsePointer = window.matchMedia('(pointer: coarse)');
     const isLandscape = window.matchMedia('(orientation: landscape)');
@@ -1279,6 +1443,48 @@
         statusBanner.innerHTML = html;
     }
 
+    function setAdminPanelVisible(visible) {
+        adminPanel.classList.toggle('visible', visible && isAdmin);
+    }
+
+    function syncAdminForm(settings) {
+        const s = settings || latestTableSettings;
+        adminInitialChips.value = String(s.initial_chips || 1000);
+        adminRoundTimer.value = String(s.round_timer_seconds || 7);
+        adminSmallBlind.value = String(s.small_blind || 10);
+        adminBigBlind.value = String(s.big_blind || 20);
+    }
+
+    function renderKickList() {
+        if (!isAdmin) {
+            adminKickList.innerHTML = '';
+            return;
+        }
+        const kickable = latestTablePlayers.filter((p) => p.session_id && p.session_id !== playerSessionId);
+        if (kickable.length === 0) {
+            adminKickList.innerHTML = '<div class="admin-subtitle">No players to kick.</div>';
+            return;
+        }
+        adminKickList.innerHTML = kickable.map((p) => (
+            `<div class="kick-item">
+                <span>${esc(p.nickname)}</span>
+                <button type="button" data-kick-session="${esc(p.session_id)}">Kick</button>
+            </div>`
+        )).join('');
+    }
+
+    function applyAdminState() {
+        adminToggle.classList.toggle('visible', isAdmin);
+        if (!isAdmin) {
+            setAdminPanelVisible(false);
+            return;
+        }
+        adminInitialChips.disabled = tableGameActive;
+        adminStartGame.disabled = tableGameActive;
+        syncAdminForm(latestTableSettings);
+        renderKickList();
+    }
+
     function updateSliderFill() {
         const min = parseInt(raiseSlider.min, 10);
         const max = parseInt(raiseSlider.max, 10);
@@ -1383,6 +1589,34 @@
         socket.emit('player_action', { action, amount, token: tableToken });
     }
 
+    adminToggle.addEventListener('click', () => {
+        setAdminPanelVisible(!adminPanel.classList.contains('visible'));
+    });
+
+    adminSaveSettings.addEventListener('click', () => {
+        if (!isAdmin) return;
+        const payload = {
+            initial_chips: Number(adminInitialChips.value || latestTableSettings.initial_chips || 1000),
+            round_timer_seconds: Number(adminRoundTimer.value || latestTableSettings.round_timer_seconds || 7),
+            small_blind: Number(adminSmallBlind.value || latestTableSettings.small_blind || 10),
+            big_blind: Number(adminBigBlind.value || latestTableSettings.big_blind || 20),
+        };
+        socket.emit('admin_update_settings', { token: tableToken, settings: payload });
+    });
+
+    adminStartGame.addEventListener('click', () => {
+        if (!isAdmin) return;
+        socket.emit('start_game', { token: tableToken });
+    });
+
+    adminKickList.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) return;
+        const kickSessionId = target.dataset.kickSession;
+        if (!kickSessionId) return;
+        socket.emit('admin_kick_player', { token: tableToken, session_id: kickSessionId });
+    });
+
     // ── Socket events ─────────────────────────────────────────────────────────
     socket.on('connect', () => {
         if (!/^[A-Z0-9]{8}$/.test(tableToken)) {
@@ -1413,6 +1647,33 @@
     });
 
     socket.on('join_error', (d) => { joinError.textContent = d.message; });
+    socket.on('start_error', (d) => {
+        const message = d && d.message ? d.message : 'Unable to start game.';
+        if (document.getElementById('game-screen').classList.contains('active')) {
+            setStatus('result', esc(message));
+        } else {
+            joinError.textContent = message;
+        }
+    });
+    socket.on('admin_error', (d) => {
+        const message = d && d.message ? d.message : 'Admin action failed.';
+        if (document.getElementById('game-screen').classList.contains('active')) {
+            setStatus('result', esc(message));
+        } else {
+            joinError.textContent = message;
+        }
+    });
+    socket.on('kicked_from_table', (d) => {
+        const message = d && d.message ? d.message : 'You were removed from the table.';
+        isAdmin = false;
+        myNickname = '';
+        pendingJoinName = '';
+        latestTablePlayers = [];
+        applyAdminState();
+        setStatus('result', esc(message));
+        joinError.textContent = message;
+        showScreen('join');
+    });
     socket.on('action_error', (d) => {
         setStatus('result', esc(d.message || 'Illegal action.'));
         actionPanel.classList.add('active');
@@ -1420,6 +1681,9 @@
 
     socket.on('join_queued', (d) => {
         applyPlayerIdentity(d.nickname, d.chips);
+        isAdmin = !!d.is_admin;
+        tableGameActive = true;
+        applyAdminState();
         document.getElementById('my-badge-queue').textContent = `${d.nickname}  ·  ${fmt(d.chips)}`;
         setStatus('', d.reconnected ? 'Reconnected. Waiting for the next hand…' : 'Waiting for the next hand…');
         showScreen('queue');
@@ -1427,11 +1691,28 @@
 
     socket.on('join_success', (d) => {
         applyPlayerIdentity(d.nickname, d.chips);
+        isAdmin = !!d.is_admin;
+        tableGameActive = false;
+        applyAdminState();
         myBadge.textContent = `${d.nickname}  ·  ${fmt(d.chips)}`;
         if (d.reconnected && !document.getElementById('game-screen').classList.contains('active')) {
             setStatus('', 'Reconnected to your table.');
         }
         showScreen('lobby');
+    });
+
+    socket.on('table_admin_update', (payload) => {
+        latestAdminSessionId = String((payload && payload.admin_session_id) || '');
+        latestTableSettings = Object.assign({}, latestTableSettings, (payload && payload.settings) || {});
+        latestTablePlayers = Array.isArray(payload && payload.players) ? payload.players : latestTablePlayers;
+        tableGameActive = !!(payload && payload.game_active);
+        if (myNickname) {
+            isAdmin = latestAdminSessionId === playerSessionId;
+            adminSubtitle.textContent = isAdmin
+                ? 'You can manage this table.'
+                : `Admin: ${(payload && payload.admin_nickname) || '—'}`;
+            applyAdminState();
+        }
     });
 
     socket.on('lobby_update', (players) => {
@@ -1443,7 +1724,9 @@
     });
 
     socket.on('game_starting', () => {
+        tableGameActive = true;
         showScreen('game');
+        applyAdminState();
         setStatus('', 'Game starting…');
     });
 
@@ -1528,6 +1811,8 @@
     });
 
     socket.on('game_finished', (d) => {
+        tableGameActive = false;
+        applyAdminState();
         currentTurnState = null;
         setRaiseUiOpen(false);
         actionPanel.classList.remove('active');

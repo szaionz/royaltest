@@ -15,6 +15,10 @@ socketio = SocketIO(app, cors_allowed_origins='*')
 
 TOKEN_LENGTH = 8
 TOKEN_ALPHABET = string.ascii_uppercase + string.digits
+DEFAULT_INITIAL_CHIPS = 1000
+DEFAULT_ROUND_TIMER_SECONDS = 7
+DEFAULT_SMALL_BLIND = 10
+DEFAULT_BIG_BLIND = 20
 
 # ── Multi-table state ─────────────────────────────────────────────────────────
 tables = {}            # token -> table state
@@ -27,6 +31,48 @@ current_game = None    # Game instance (active during a game session)
 session_to_player = {} # session_id -> HumanPlayer (during game)
 game_active = False
 join_queue = []        # [session_id] players waiting to join next hand
+admin_session_id = None
+table_settings = {}
+
+
+def _default_table_settings():
+    return {
+        'initial_chips': DEFAULT_INITIAL_CHIPS,
+        'round_timer_seconds': DEFAULT_ROUND_TIMER_SECONDS,
+        'small_blind': DEFAULT_SMALL_BLIND,
+        'big_blind': DEFAULT_BIG_BLIND,
+    }
+
+
+def _sanitize_table_settings(payload: dict, allow_initial_chips: bool = True):
+    incoming = payload or {}
+    next_settings = dict(table_settings or _default_table_settings())
+    def _safe_int(value, fallback):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    if allow_initial_chips and 'initial_chips' in incoming:
+        chips = _safe_int(incoming.get('initial_chips'), DEFAULT_INITIAL_CHIPS)
+        next_settings['initial_chips'] = min(1_000_000, max(100, chips))
+
+    if 'round_timer_seconds' in incoming:
+        timer = _safe_int(incoming.get('round_timer_seconds'), DEFAULT_ROUND_TIMER_SECONDS)
+        next_settings['round_timer_seconds'] = min(60, max(3, timer))
+
+    if 'small_blind' in incoming:
+        sb = _safe_int(incoming.get('small_blind'), DEFAULT_SMALL_BLIND)
+        next_settings['small_blind'] = min(100_000, max(1, sb))
+
+    if 'big_blind' in incoming:
+        bb = _safe_int(incoming.get('big_blind'), DEFAULT_BIG_BLIND)
+        next_settings['big_blind'] = min(200_000, max(2, bb))
+
+    if next_settings['big_blind'] < next_settings['small_blind']:
+        next_settings['big_blind'] = next_settings['small_blind'] * 2
+
+    return next_settings
 
 
 def _new_table_state():
@@ -37,6 +83,8 @@ def _new_table_state():
         'session_to_player': {},
         'game_active': False,
         'join_queue': [],
+        'admin_session_id': None,
+        'table_settings': _default_table_settings(),
     }
 
 
@@ -55,7 +103,7 @@ def _generate_token() -> str:
 
 
 def _activate_table(token: str):
-    global active_token, session_players, sid_to_session, current_game, session_to_player, game_active, join_queue
+    global active_token, session_players, sid_to_session, current_game, session_to_player, game_active, join_queue, admin_session_id, table_settings
     if token not in tables:
         tables[token] = _new_table_state()
     state = tables[token]
@@ -66,6 +114,8 @@ def _activate_table(token: str):
     session_to_player = state['session_to_player']
     game_active = state['game_active']
     join_queue = state['join_queue']
+    admin_session_id = state.get('admin_session_id')
+    table_settings = state.get('table_settings') or _default_table_settings()
 
 
 def _persist_runtime_state():
@@ -78,6 +128,8 @@ def _persist_runtime_state():
         'session_to_player': session_to_player,
         'game_active': game_active,
         'join_queue': join_queue,
+        'admin_session_id': admin_session_id,
+        'table_settings': table_settings,
     }
 
 
@@ -144,6 +196,7 @@ def on_disconnect():
     _persist_runtime_state()
     _broadcast_lobby()
     _broadcast_queue()
+    _broadcast_admin_state()
 
     if current_game:
         _process_automatic_turns()
@@ -161,6 +214,7 @@ def on_host_connected(data):
     join_room(token)
     emit('lobby_update', _lobby_snapshot())
     emit('queue_update', _queue_snapshot())
+    emit('table_admin_update', _table_admin_snapshot())
     if current_game:
         emit('game_starting', {})
         emit('game_state', current_game.to_dict())
@@ -190,11 +244,13 @@ def on_join_game(data):
     if existing:
         _attach_session_to_sid(session_id, _request_sid())
         _sync_player_connection(session_id)
+        _ensure_admin_assigned()
         _persist_runtime_state()
         print(f'[rejoin] {existing["nickname"]}')
         _emit_session_state(session_id)
         _broadcast_lobby()
         _broadcast_queue()
+        _broadcast_admin_state()
         if current_game:
             _broadcast_game_state()
         return
@@ -209,14 +265,16 @@ def on_join_game(data):
         emit('join_error', {'message': f'"{nickname}" is already taken. Choose another.'})
         return
 
+    initial_chips = int((table_settings or _default_table_settings()).get('initial_chips', DEFAULT_INITIAL_CHIPS))
     session_players[session_id] = {
         'session_id': session_id,
         'nickname': nickname,
-        'chips': 1000,
+        'chips': initial_chips,
         'sid': None,
         'is_connected': False,
         'state': 'lobby',
     }
+    _ensure_admin_assigned(session_id)
     _attach_session_to_sid(session_id, _request_sid())
 
     if game_active:
@@ -224,14 +282,16 @@ def on_join_game(data):
         join_queue.append(session_id)
         _persist_runtime_state()
         print(f'[queued] {nickname}')
-        emit('join_queued', {'nickname': nickname, 'chips': 1000, 'position': len(join_queue)})
+        emit('join_queued', {'nickname': nickname, 'chips': initial_chips, 'position': len(join_queue), 'is_admin': session_id == admin_session_id})
         _broadcast_queue()
+        _broadcast_admin_state()
         return
 
     _persist_runtime_state()
     print(f'[join] {nickname}')
-    emit('join_success', {'nickname': nickname, 'chips': 1000})
+    emit('join_success', {'nickname': nickname, 'chips': initial_chips, 'is_admin': session_id == admin_session_id})
     _broadcast_lobby()
+    _broadcast_admin_state()
 
 
 @socketio.on('start_game')
@@ -242,6 +302,9 @@ def on_start_game(data):
         emit('start_error', {'message': 'Missing table token.'})
         return
     _activate_table(token)
+    if not _is_admin_sid(_request_sid()):
+        emit('start_error', {'message': 'Only the first player to join can start the game.'})
+        return
 
     players_list = _connected_lobby_players()
     if len(players_list) < 2:
@@ -262,7 +325,12 @@ def on_start_game(data):
         players.append(p)
         session_to_player[session_id] = p
 
-    current_game = Game(players)
+    settings = table_settings or _default_table_settings()
+    current_game = Game(
+        players,
+        small_blind=int(settings.get('small_blind', DEFAULT_SMALL_BLIND)),
+        big_blind=int(settings.get('big_blind', DEFAULT_BIG_BLIND)),
+    )
     game_active = True
     current_game.start_hand()
     _persist_runtime_state()
@@ -270,6 +338,7 @@ def on_start_game(data):
     print(f'[start_game] {len(players)} players')
     socketio.emit('game_starting', {}, to=active_token)
     _broadcast_lobby()
+    _broadcast_admin_state()
     _broadcast_game_state()
     _send_private_hands()
     _process_automatic_turns()
@@ -309,6 +378,97 @@ def on_next_hand(data):
     _broadcast_game_state()
     _send_private_hands()
     _process_automatic_turns()
+
+
+@socketio.on('admin_update_settings')
+def on_admin_update_settings(data):
+    global table_settings
+    token = _normalize_token((data or {}).get('token')) or sid_to_token.get(_request_sid(), '')
+    if not token:
+        return
+    _activate_table(token)
+    if not _is_admin_sid(_request_sid()):
+        emit('admin_error', {'message': 'Only the table admin can update settings.'})
+        return
+
+    allow_initial_chips = not game_active
+    table_settings = _sanitize_table_settings((data or {}).get('settings') or {}, allow_initial_chips=allow_initial_chips)
+
+    if not game_active:
+        target_chips = int(table_settings.get('initial_chips', DEFAULT_INITIAL_CHIPS))
+        for info in session_players.values():
+            if info['state'] == 'lobby':
+                info['chips'] = target_chips
+
+    if current_game:
+        current_game.small_blind = int(table_settings.get('small_blind', current_game.small_blind))
+        current_game.big_blind = int(table_settings.get('big_blind', current_game.big_blind))
+        current_game.min_raise = current_game.big_blind
+        _sync_all_game_player_chips()
+
+    _persist_runtime_state()
+    _broadcast_lobby()
+    _broadcast_admin_state()
+    if current_game:
+        _broadcast_game_state()
+
+
+@socketio.on('admin_kick_player')
+def on_admin_kick_player(data):
+    token = _normalize_token((data or {}).get('token')) or sid_to_token.get(_request_sid(), '')
+    if not token:
+        return
+    _activate_table(token)
+    if not _is_admin_sid(_request_sid()):
+        emit('admin_error', {'message': 'Only the table admin can kick players.'})
+        return
+
+    target_session_id = str((data or {}).get('session_id') or '').strip()
+    if not target_session_id or target_session_id not in session_players:
+        emit('admin_error', {'message': 'Player not found.'})
+        return
+
+    if target_session_id == admin_session_id:
+        emit('admin_error', {'message': 'Admin cannot kick themselves.'})
+        return
+
+    target_info = session_players.get(target_session_id)
+    target_sid = target_info.get('sid') if target_info else None
+    if target_sid:
+        socketio.emit('kicked_from_table', {'message': 'You were removed from the table by the admin.'}, to=target_sid)
+        sid_to_session.pop(target_sid, None)
+        sid_to_token.pop(target_sid, None)
+        leave_room(active_token, sid=target_sid)
+
+    if target_session_id in join_queue:
+        join_queue[:] = [sid for sid in join_queue if sid != target_session_id]
+
+    kick_event = None
+    game_player = session_to_player.pop(target_session_id, None)
+    if current_game and game_player and game_player in current_game.players:
+        idx = current_game.players.index(game_player)
+        if current_game.to_act and current_game.to_act[0] == idx:
+            _, kick_event = current_game.apply_action(None, 'fold', 0)
+        else:
+            game_player.folded = True
+            current_game.to_act = [i for i in current_game.to_act if i != idx]
+            current_game.raise_reopened_for.discard(idx)
+        game_player.chips = 0
+        game_player.sid = None
+        game_player.is_connected = False
+
+    session_players.pop(target_session_id, None)
+    _persist_runtime_state()
+    _broadcast_lobby()
+    _broadcast_queue()
+    _broadcast_admin_state()
+    if current_game:
+        _sync_all_game_player_chips()
+        if kick_event == 'game_over':
+            _broadcast_hand_over()
+        else:
+            _process_automatic_turns()
+        _broadcast_game_state()
 
 
 # ── Game helpers ──────────────────────────────────────────────────────────────
@@ -450,6 +610,7 @@ def _broadcast_hand_over():
         'winner_details': current_game.winner_hand_details(),
         'pot_results': current_game.get_pot_results(),
         'game_state': current_game.to_dict(),
+        'round_timer_seconds': int((table_settings or _default_table_settings()).get('round_timer_seconds', DEFAULT_ROUND_TIMER_SECONDS)),
     }, to=active_token)
 
 
@@ -463,12 +624,53 @@ def _connected_lobby_players():
     return [info for info in _lobby_players() if info['is_connected']]
 
 
+def _ensure_admin_assigned(preferred_session_id: str | None = None):
+    global admin_session_id
+    if admin_session_id and admin_session_id in session_players:
+        return
+    if preferred_session_id and preferred_session_id in session_players:
+        admin_session_id = preferred_session_id
+        return
+    admin_session_id = next(iter(session_players.keys()), None)
+
+
+def _is_admin_sid(sid: str) -> bool:
+    if not sid:
+        return False
+    session_id = sid_to_session.get(sid)
+    return bool(session_id and session_id == admin_session_id)
+
+
+def _table_admin_snapshot():
+    settings = table_settings or _default_table_settings()
+    admin_name = ''
+    if admin_session_id and admin_session_id in session_players:
+        admin_name = session_players[admin_session_id]['nickname']
+    return {
+        'admin_session_id': admin_session_id,
+        'admin_nickname': admin_name,
+        'settings': settings,
+        'game_active': game_active,
+        'players': [
+            {
+                'session_id': info['session_id'],
+                'nickname': info['nickname'],
+                'state': info['state'],
+                'is_connected': info['is_connected'],
+            }
+            for info in session_players.values()
+        ],
+    }
+
+
 def _lobby_snapshot():
     return [
         {
+            'session_id': info['session_id'],
             'nickname': info['nickname'],
             'chips': info['chips'],
             'is_connected': info['is_connected'],
+            'is_admin': info['session_id'] == admin_session_id,
         }
         for info in _lobby_players()
     ]
@@ -476,6 +678,10 @@ def _lobby_snapshot():
 
 def _broadcast_lobby():
     socketio.emit('lobby_update', _lobby_snapshot(), to=active_token)
+
+
+def _broadcast_admin_state():
+    socketio.emit('table_admin_update', _table_admin_snapshot(), to=active_token)
 
 
 def _queue_snapshot():
@@ -535,6 +741,7 @@ def _emit_session_state(session_id: str):
         'nickname': info['nickname'],
         'chips': info['chips'],
         'reconnected': True,
+        'is_admin': session_id == admin_session_id,
     }
 
     if info['state'] == 'queued':

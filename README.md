@@ -2,8 +2,8 @@
 
 RoyalTest is a browser-based, private Texas Hold'em game with:
 
-- a host screen (`/host`) for table control and game flow
-- a player screen (`/join`) for mobile-friendly actions
+- a host screen (`/host`) for table display and spectators
+- a player screen (`/join`) for mobile-friendly actions and admin controls
 - real-time updates powered by Flask-SocketIO
 <div align="center">
   
@@ -84,8 +84,9 @@ ROYALTEST_SECRET_KEY="change-me" ROYALTEST_DEBUG=1 python3 server/app.py
 
 1. Open `/host` on the main display.
 2. Players join from their phones using `/join`.
-3. Host starts the game when enough players are seated.
-4. New joiners during a hand are queued for the next hand.
+3. The first player to join becomes table admin and starts the game when enough players are seated.
+4. Admin can configure chips, blinds, and round timer before the game, and update blinds/timer or kick players mid-game.
+5. New joiners during a hand are queued for the next hand.
 
 ## Project Structure
 
