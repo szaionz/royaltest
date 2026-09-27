@@ -1606,7 +1606,13 @@
 
     adminStartGame.addEventListener('click', () => {
         if (!isAdmin) return;
-        socket.emit('start_game', { token: tableToken });
+        const payload = {
+            initial_chips: Number(adminInitialChips.value || latestTableSettings.initial_chips || 1000),
+            round_timer_seconds: Number(adminRoundTimer.value || latestTableSettings.round_timer_seconds || 7),
+            small_blind: Number(adminSmallBlind.value || latestTableSettings.small_blind || 10),
+            big_blind: Number(adminBigBlind.value || latestTableSettings.big_blind || 20),
+        };
+        socket.emit('start_game', { token: tableToken, settings: payload });
     });
 
     adminKickList.addEventListener('click', (event) => {

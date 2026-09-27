@@ -296,7 +296,7 @@ def on_join_game(data):
 
 @socketio.on('start_game')
 def on_start_game(data):
-    global current_game, session_to_player, game_active
+    global current_game, session_to_player, game_active, table_settings
     token = _normalize_token((data or {}).get('token')) or sid_to_token.get(_request_sid(), '')
     if not token:
         emit('start_error', {'message': 'Missing table token.'})
@@ -305,6 +305,13 @@ def on_start_game(data):
     if not _is_admin_sid(_request_sid()):
         emit('start_error', {'message': 'Only the first player to join can start the game.'})
         return
+
+    requested_settings = (data or {}).get('settings') or {}
+    table_settings = _sanitize_table_settings(requested_settings, allow_initial_chips=True)
+    target_chips = int(table_settings.get('initial_chips', DEFAULT_INITIAL_CHIPS))
+    for info in session_players.values():
+        if info['state'] == 'lobby':
+            info['chips'] = target_chips
 
     players_list = _connected_lobby_players()
     if len(players_list) < 2:
